@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>GPS Tracker</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    body { margin:0; }
+    #map { height:100vh; }
+
+    .arrow-icon div {
+      transition: transform 0.3s linear;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script>
+const map = L.map("map").setView([47.09, 15.42], 13);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap"
+}).addTo(map);
+
+const markers = {};
+const lastPositions = {};
+const lastAngles = {};
+let followedDevice = null;
+
+// Richtung berechnen
+function getBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+// Pfeil Icon
+function createArrow(angle, active=false) {
+  return L.divIcon({
+    html: `<div style="transform: rotate(${angle}deg); font-size:26px; color:${active?'red':'black'}">➤</div>`,
+    iconSize: [30,30],
+    iconAnchor: [15,15]
+  });
+}
+
+// Marker klick → Tracking aktivieren
+function attachClick(marker, deviceId) {
+  marker.on("click", async () => {
+    followedDevice = deviceId;
+
+    await fetch(`https://gps-server-f9b6.onrender.com/devices/${deviceId}/watch?watcherId=web`, { method:"POST" });
+    await fetch(`https://gps-server-f9b6.onrender.com/devices/${deviceId}/wakeup`, { method:"POST" });
+
+    alert("Tracking aktiv für " + deviceId);
+  });
+}
+
+// Update
+function updateDevice(d) {
+  const { deviceId, lat, lon, speed } = d;
+
+  let angle = lastAngles[deviceId] || 0;
+
+  if (lastPositions[deviceId]) {
+    const prev = lastPositions[deviceId];
+    const newAngle = getBearing(prev.lat, prev.lon, lat, lon);
+
+    if (speed > 1) {
+      angle = angle + (newAngle - angle) * 0.3;
+      lastAngles[deviceId] = angle;
+    }
+  }
+
+  lastPositions[deviceId] = { lat, lon };
+
+  if (!markers[deviceId]) {
+    const m = L.marker([lat, lon], { icon: createArrow(angle) }).addTo(map);
+    attachClick(m, deviceId);
+    markers[deviceId] = m;
+  } else {
+    markers[deviceId].setLatLng([lat, lon]);
+    markers[deviceId].setIcon(createArrow(angle, followedDevice === deviceId));
+  }
+
+  if (followedDevice === deviceId) {
+    map.setView([lat, lon], 17);
+  }
+}
+
+// WebSocket
+const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+
+ws.onmessage = (msg) => {
+  const data = JSON.parse(msg.data);
+  updateDevice(data);
+};
+</script>
+
+</body>
+</html>
