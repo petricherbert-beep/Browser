@@ -18,15 +18,15 @@ body {
   height: 100vh;
 }
 
-/* Panel */
+/* 🖤 PANEL */
 #panel {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 9999;
 
-  width: 280px;
-  max-height: 80vh;
+  width: 300px;
+  max-height: 85vh;
   overflow: auto;
 
   background: rgba(20,20,20,0.75);
@@ -60,6 +60,13 @@ body {
 <div id="panel">
   <b>📡 Tracker</b>
   <div id="list"></div>
+
+  <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:10px 0;">
+
+  <!-- 📊 INFO PANEL -->
+  <div id="infoBox" style="font-size:14px; line-height:1.5; opacity:0.95;">
+    👆 Wähle ein Gerät
+  </div>
 </div>
 
 <div id="map"></div>
@@ -101,15 +108,15 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   ICON (FIXED)
+   ICON (PFEIL + INITIAL)
 ========================= */
 function createArrowIcon(angle, name="") {
 
   const n = (name || "").toLowerCase();
 
   let color = "#2ecc71";
-  if (n.includes("nicole")) color = "#ff3b30"; // rot
-  if (n.includes("oliver")) color = "#0a84ff"; // blau
+  if (n.includes("nicole")) color = "#ff3b30";
+  if (n.includes("oliver")) color = "#0a84ff";
 
   const initial = name ? name.charAt(0).toUpperCase() : "?";
 
@@ -118,13 +125,12 @@ function createArrowIcon(angle, name="") {
     html: `
       <div style="
         transform: rotate(${angle}deg);
-        font-size: 40px;
+        font-size: 42px;
         color:${color};
         position: relative;
         text-shadow: 0 0 6px rgba(0,0,0,0.6);
       ">
         ➤
-
         <div style="
           position:absolute;
           top:50%;
@@ -141,6 +147,29 @@ function createArrowIcon(angle, name="") {
     iconSize: [44,44],
     iconAnchor: [22,22]
   });
+}
+
+/* =========================
+   INFO PANEL
+========================= */
+function showInfo(d) {
+  const box = document.getElementById("infoBox");
+
+  box.innerHTML = `
+    <div style="font-size:16px; font-weight:700; margin-bottom:6px;">
+      📍 ${d.name}
+    </div>
+
+    🚗 Speed: ${d.speed} km/h<br>
+    🔋 Battery: ${d.battery}%<br>
+    🎯 Accuracy: ${d.accuracy} m<br>
+    📡 Status: ${d.status}<br>
+
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:8px 0;">
+
+    📌 Lat: ${d.lat.toFixed(5)}<br>
+    📌 Lon: ${d.lon.toFixed(5)}
+  `;
 }
 
 /* =========================
@@ -164,8 +193,8 @@ function renderList(devs){
 
     div.onclick=()=>{
       followId=d.deviceId;
+      showInfo(d);
       map.setView([d.lat,d.lon],17);
-      markers[d.deviceId]?.openPopup();
     };
 
     list.appendChild(div);
@@ -173,7 +202,7 @@ function renderList(devs){
 }
 
 /* =========================
-   UPDATE DEVICE
+   UPDATE
 ========================= */
 function update(d){
 
@@ -188,24 +217,26 @@ function update(d){
   }
 
   if(!markers[deviceId]){
-    markers[deviceId]=L.marker([lat,lon],{
+    const m=L.marker([lat,lon],{
       icon:createArrowIcon(0,name)
     }).addTo(map);
 
-    markers[deviceId].bindPopup(`
-      <div style="min-width:200px">
-        <b style="font-size:16px;">📍 ${name}</b><br><br>
-        🚗 Speed: ${speed} km/h<br>
-        🔋 Battery: ${battery}%<br>
-        🎯 Accuracy: ${accuracy} m<br>
-        📡 Status: ${status}
-      </div>
-    `);
+    m.on("click",()=>{
+      followId=deviceId;
+      showInfo(d);
+      map.setView([lat,lon],17);
+    });
+
+    markers[deviceId]=m;
+  }
+
+  if(followId===deviceId){
+    showInfo(d);
   }
 }
 
 /* =========================
-   ANIMATION LOOP
+   ANIMATION
 ========================= */
 function animate(){
 
