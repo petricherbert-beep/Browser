@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS PRO TRACKER</title>
+<title>GPS PRO TRACKER FIXED</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -18,7 +18,7 @@ body {
   height: 100vh;
 }
 
-/* 🖤 PANEL */
+/* PANEL */
 #panel {
   position: absolute;
   top: 12px;
@@ -29,7 +29,7 @@ body {
   max-height: 85vh;
   overflow: auto;
 
-  background: rgba(20,20,20,0.75);
+  background: rgba(20,20,20,0.78);
   backdrop-filter: blur(14px);
   color: white;
 
@@ -69,7 +69,7 @@ button:hover {
 <body>
 
 <div id="panel">
-  <b>🚗 PRO TRACKER</b>
+  <b>🚗 PRO TRACKER FIX</b>
 
   <div style="margin-top:8px;">
     <button onclick="toggleCompass()">🧭 Compass Mode</button>
@@ -82,9 +82,7 @@ button:hover {
 
   <hr>
 
-  <div id="infoBox">
-    👆 Select device
-  </div>
+  <div id="infoBox">👆 Select device</div>
 </div>
 
 <div id="map"></div>
@@ -132,7 +130,7 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   ICON
+   ICON FIXED
 ========================= */
 function icon(angle,name="") {
 
@@ -174,15 +172,25 @@ function icon(angle,name="") {
 }
 
 /* =========================
-   INFO PANEL
+   INFO PANEL (WITH CONTROLS)
 ========================= */
 function showInfo(d){
+
   document.getElementById("infoBox").innerHTML=`
     <b>${d.name}</b><br><br>
+
     🚗 ${d.speed} km/h<br>
     🔋 ${d.battery}%<br>
     🎯 ${d.accuracy} m<br>
     📡 ${d.status}<br>
+
+    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:8px 0;">
+
+    <button onclick="setAlarm('${d.deviceId}', true)">🚨 Alarm ON</button>
+    <button onclick="setAlarm('${d.deviceId}', false)">🔕 Alarm OFF</button>
+
+    <button onclick="watch('${d.deviceId}')">👁 Watch ON</button>
+    <button onclick="unwatch('${d.deviceId}')">🚫 Watch OFF</button>
   `;
 }
 
@@ -190,21 +198,28 @@ function showInfo(d){
    CONTROL API
 ========================= */
 async function setAlarm(id,v){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{
+    method:"POST"
+  });
 }
 
 async function watch(id){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{
+    method:"POST"
+  });
 }
 
 async function unwatch(id){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{
+    method:"POST"
+  });
 }
 
 /* =========================
    LIST
 ========================= */
 function render(list){
+
   const el=document.getElementById("list");
   el.innerHTML="";
 
@@ -264,7 +279,7 @@ function update(d){
 }
 
 /* =========================
-   ANIMATION ENGINE
+   ANIMATION ENGINE (FIXED BEARING)
 ========================= */
 let rotation=0;
 
@@ -282,26 +297,27 @@ function animate(){
 
     let ang=0;
 
-    if(last[id]){
-      ang=bearing(last[id].lat,last[id].lon,nl,no);
+    const prev=last[id];
+    if(prev){
+      ang=bearing(prev.lat,prev.lon,nl,no);
     }
 
-    last[id]=t;
+    last[id]={lat:nl,lon:no};
 
     c.lat=nl;
     c.lon=no;
 
     if(markers[id]){
       markers[id].setLatLng([nl,no]);
-      markers[id].setIcon(icon(ang,names[id]));
+      markers[id].setIcon(icon(ang,names[id]||""));
     }
 
-    /* 📍 Navigation Mode */
+    /* NAVIGATION MODE */
     if(navigationMode && id===followedId){
       map.setView([nl,no],map.getZoom(),{animate:false});
     }
 
-    /* 🧭 Compass Mode */
+    /* COMPASS MODE */
     if(compassMode && id===followedId){
       rotation=-ang;
       document.querySelector(".leaflet-map-pane").style.transform=
@@ -328,6 +344,7 @@ function toggleCompass(){
 async function load(){
   const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data=await res.json();
+
   render(data);
   data.forEach(update);
 }
