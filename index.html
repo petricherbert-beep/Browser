@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>CarPlay GPS Tracker</title>
+<title>GPS Tracker</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -18,16 +18,12 @@ body {
   height: 100vh;
 }
 
-/* 🖤 CarPlay Panel */
+/* 🖤 Panel */
 #panel {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 9999;
-
-  width: 280px;
-  max-height: 80vh;
-  overflow: auto;
 
   background: rgba(20,20,20,0.75);
   backdrop-filter: blur(12px);
@@ -35,6 +31,9 @@ body {
 
   padding: 14px;
   border-radius: 14px;
+  width: 280px;
+  max-height: 80vh;
+  overflow: auto;
 
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
@@ -52,19 +51,13 @@ body {
 .online { color: #2ecc71; }
 .idle { color: #f1c40f; }
 .offline { color: #e74c3c; }
-
-/* 🚗 Marker */
-.car-icon div {
-  font-size: 42px;
-  text-shadow: 0 0 10px rgba(0,0,0,0.8);
-}
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <b>🚗 CarPlay Tracker</b>
+  <b>📡 Tracker</b>
   <div id="list"></div>
 </div>
 
@@ -82,69 +75,97 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
    STATE
 ========================= */
 const markers = {};
-const currentPos = {};
-const targetPos = {};
-let followedDevice = null;
-let navigationMode = false;
+const lastPos = {};
+const lastAngle = {};
+const current = {};
+const target = {};
+let followId = null;
 
 /* =========================
-   SMOOTH HELPERS
+   MATH
 ========================= */
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
+function lerp(a,b,t){ return a + (b-a)*t; }
 
-function getBearing(lat1, lon1, lat2, lon2) {
-  const toRad = d => d * Math.PI / 180;
-  const toDeg = r => r * 180 / Math.PI;
+function bearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d*Math.PI/180;
+  const toDeg = r => r*180/Math.PI;
 
-  const dLon = toRad(lon2 - lon1);
-  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const dLon = toRad(lon2-lon1);
+  const y = Math.sin(dLon)*Math.cos(toRad(lat2));
   const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    Math.cos(toRad(lat1))*Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLon);
 
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  return (toDeg(Math.atan2(y,x)) + 360) % 360;
 }
 
 /* =========================
-   CAR ICON
+   ICON (PFEIL + INITIAL + FARBE)
 ========================= */
-function createCarIcon(name="") {
-  const n = (name || "").toLowerCase();
+function createArrowIcon(angle, name="") {
+  const n = (name||"").toLowerCase();
 
-  let color = "#2ecc71"; // green
-  if (n.includes("nicole")) color = "#ff3b30"; // red
-  if (n.includes("oliver")) color = "#0a84ff"; // blue
+  let color = "#2ecc71";
+  if (n.includes("nicole")) color = "#ff3b30"; // rot
+  if (n.includes("oliver")) color = "#0a84ff"; // blau
+
+  const initial = (name && name.length > 0)
+    ? name[0].toUpperCase()
+    : "?";
 
   return L.divIcon({
     className: "",
-    html: `<div style="color:${color}; font-size:42px;">🚗</div>`,
-    iconSize: [40,40],
-    iconAnchor: [20,20]
+    html: `
+      <div style="
+        transform: rotate(${angle}deg);
+        width: 44px;
+        height: 44px;
+
+        display:flex;
+        align-items:center;
+        justify-content:center;
+
+        background: ${color};
+        border: 2px solid rgba(0,0,0,0.6);
+        border-radius: 50% 50% 50% 0;
+        transform-origin: center;
+
+        box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+      ">
+        <div style="
+          transform: rotate(-${angle}deg);
+          color:white;
+          font-weight:700;
+          font-size:16px;
+        ">${initial}</div>
+      </div>
+    `,
+    iconSize: [44,44],
+    iconAnchor: [22,22]
   });
 }
 
 /* =========================
-   LIST UI
+   LIST
 ========================= */
-function renderList(devices) {
+function renderList(devs){
   const list = document.getElementById("list");
   list.innerHTML = "";
 
-  devices.forEach(d => {
+  devs.forEach(d=>{
     const div = document.createElement("div");
     div.className = "device";
 
     div.innerHTML = `
-      <b style="font-size:15px;">${d.name || d.deviceId}</b><br>
+      <b>${d.name}</b><br>
       <small class="${d.status}">● ${d.status}</small><br>
       🔋 ${d.battery}% | 🚗 ${d.speed} km/h
     `;
 
-    div.onclick = () => {
-      followDevice(d.deviceId);
-      map.setView([d.lat, d.lon], 17, { animate: true });
+    div.onclick = ()=>{
+      followId = d.deviceId;
+      map.setView([d.lat,d.lon],17);
+      markers[d.deviceId]?.openPopup();
     };
 
     list.appendChild(div);
@@ -152,34 +173,27 @@ function renderList(devices) {
 }
 
 /* =========================
-   FOLLOW
+   UPDATE
 ========================= */
-function followDevice(id) {
-  followedDevice = id;
-  navigationMode = true;
-}
+function update(d){
+  const {deviceId,lat,lon,speed,battery,accuracy,name,status}=d;
 
-/* =========================
-   UPDATE DEVICE
-========================= */
-function updateDevice(d) {
-  const { deviceId, lat, lon, speed, battery, accuracy, name, status } = d;
+  target[deviceId]={lat,lon};
 
-  targetPos[deviceId] = { lat, lon };
-
-  if (!currentPos[deviceId]) {
-    currentPos[deviceId] = { lat, lon };
+  if(!current[deviceId]){
+    current[deviceId]={lat,lon};
   }
 
-  if (!markers[deviceId]) {
-    const marker = L.marker([lat, lon], {
-      icon: createCarIcon(name)
+  if(!markers[deviceId]){
+    const m=L.marker([lat,lon],{
+      icon:createArrowIcon(0,name)
     }).addTo(map);
 
-    marker.bindPopup(`
-      <div style="min-width:180px">
-        <b style="font-size:16px;">🚗 ${name || deviceId}</b><br><br>
-        📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}<br>
+    m.bindPopup(`
+      <div style="min-width:200px">
+        <b style="font-size:16px;">📍 ${name}</b><br><br>
+        📌 Lat: ${lat.toFixed(5)}<br>
+        📌 Lon: ${lon.toFixed(5)}<br>
         🚗 Speed: ${speed} km/h<br>
         🔋 Battery: ${battery}%<br>
         🎯 Accuracy: ${accuracy} m<br>
@@ -187,32 +201,46 @@ function updateDevice(d) {
       </div>
     `);
 
-    markers[deviceId] = marker;
+    markers[deviceId]=m;
   }
 }
 
 /* =========================
-   ANIMATION LOOP (SMOOTH)
+   ANIMATION LOOP
 ========================= */
-function animate() {
-  Object.keys(targetPos).forEach(id => {
-    if (!currentPos[id]) return;
+function animate(){
+  Object.keys(target).forEach(id=>{
 
-    const c = currentPos[id];
-    const t = targetPos[id];
+    const c=current[id];
+    const t=target[id];
 
-    c.lat = lerp(c.lat, t.lat, 0.08);
-    c.lon = lerp(c.lon, t.lon, 0.08);
+    if(!c||!t) return;
 
-    if (markers[id]) {
-      markers[id].setLatLng([c.lat, c.lon]);
+    const newLat=lerp(c.lat,t.lat,0.08);
+    const newLon=lerp(c.lon,t.lon,0.08);
+
+    /* Richtung */
+    let ang=lastAngle[id]||0;
+    if(lastPos[id]){
+      ang=bearing(lastPos[id].lat,lastPos[id].lon,newLat,newLon);
     }
 
-    if (followedDevice === id && navigationMode) {
-      map.setView([c.lat, c.lon], map.getZoom(), {
-        animate: false
-      });
+    lastAngle[id]=ang;
+    lastPos[id]=t;
+
+    c.lat=newLat;
+    c.lon=newLon;
+
+    if(markers[id]){
+      markers[id].setLatLng([newLat,newLon]);
+      markers[id].setIcon(createArrowIcon(ang, id));
     }
+
+    /* Follow */
+    if(followId===id){
+      map.setView([newLat,newLon],map.getZoom(),{animate:false});
+    }
+
   });
 
   requestAnimationFrame(animate);
@@ -221,27 +249,27 @@ function animate() {
 animate();
 
 /* =========================
-   LOAD INITIAL DATA
+   LOAD
 ========================= */
-async function loadDevices() {
-  const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const devices = await res.json();
+async function load(){
+  const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data=await res.json();
 
-  devices.forEach(updateDevice);
-  renderList(devices);
+  data.forEach(update);
+  renderList(data);
 }
 
-loadDevices();
+load();
 
 /* =========================
-   WEBSOCKET
+   WS
 ========================= */
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-ws.onmessage = (msg) => {
-  const data = JSON.parse(msg.data);
-  updateDevice(data);
-  loadDevices();
+ws.onmessage=(m)=>{
+  const d=JSON.parse(m.data);
+  update(d);
+  load();
 };
 
 </script>
