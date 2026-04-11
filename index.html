@@ -82,6 +82,8 @@ button {
 
 <script>
 
+console.log("SCRIPT LOADED ✅");
+
 /* =========================
    MAP
 ========================= */
@@ -105,41 +107,7 @@ let followedId = null;
 let navigationMode = false;
 
 /* =========================
-   BEARING
-========================= */
-function bearing(lat1, lon1, lat2, lon2) {
-  const toRad = d => d * Math.PI / 180;
-  const toDeg = r => r * 180 / Math.PI;
-
-  const dLon = toRad(lon2 - lon1);
-
-  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
-  const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
-
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}
-
-/* =========================
-   CAMERA FOLLOW
-========================= */
-function followCar(lat, lon, heading) {
-
-  const offset = 0.0012;
-  const rad = heading * Math.PI / 180;
-
-  const camLat = lat - Math.cos(rad) * offset;
-  const camLon = lon - Math.sin(rad) * offset;
-
-  map.setView([camLat, camLon], map.getZoom(), {
-    animate: true,
-    duration: 0.25
-  });
-}
-
-/* =========================
-   ICON (FIXED COLOR + SAFE)
+   ICON
 ========================= */
 function icon(angle, name="") {
 
@@ -181,7 +149,41 @@ function icon(angle, name="") {
 }
 
 /* =========================
-   INFO PANEL (UNCHANGED)
+   BEARING
+========================= */
+function bearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+
+  const dLon = toRad(lon2 - lon1);
+
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/* =========================
+   CAMERA FOLLOW
+========================= */
+function followCar(lat, lon, heading) {
+
+  const offset = 0.0012;
+  const rad = heading * Math.PI / 180;
+
+  const camLat = lat - Math.cos(rad) * offset;
+  const camLon = lon - Math.sin(rad) * offset;
+
+  map.setView([camLat, camLon], map.getZoom(), {
+    animate: true,
+    duration: 0.25
+  });
+}
+
+/* =========================
+   INFO PANEL
 ========================= */
 function showInfo(d){
   document.getElementById("infoBox").innerHTML=`
@@ -203,7 +205,7 @@ function showInfo(d){
 }
 
 /* =========================
-   API (UNCHANGED)
+   API
 ========================= */
 async function setAlarm(id,v){
   await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
@@ -218,22 +220,24 @@ async function unwatch(id){
 }
 
 /* =========================
-   UPDATE DEVICE
+   UPDATE
 ========================= */
 function update(d){
 
-  const {deviceId,lat,lon} = d;
+  console.log("UPDATE:", d);
+
+  const {deviceId, lat, lon} = d;
 
   names[deviceId] = d.name;
 
-  target[deviceId] = {lat,lon};
+  target[deviceId] = {lat, lon};
 
   if(!current[deviceId]){
-    current[deviceId] = {lat,lon};
+    current[deviceId] = {lat, lon};
   }
 
   if(!markers[deviceId]){
-    markers[deviceId] = L.marker([lat,lon], {
+    markers[deviceId] = L.marker([lat, lon], {
       icon: icon(0, d.name)
     }).addTo(map);
 
@@ -241,8 +245,10 @@ function update(d){
       followedId = deviceId;
       navigationMode = true;
       showInfo(d);
-      map.setView([lat,lon],17);
+      map.setView([lat, lon], 17);
     });
+
+    render(d);
   }
 
   if(followedId === deviceId){
@@ -251,7 +257,7 @@ function update(d){
 }
 
 /* =========================
-   ENGINE (FIXED ROTATION)
+   ENGINE
 ========================= */
 function animate(){
 
@@ -265,13 +271,13 @@ function animate(){
     const nl = c.lat + (t.lat - c.lat) * 0.12;
     const no = c.lon + (t.lon - c.lon) * 0.12;
 
-    let ang = 0;
+    let ang = headingState[id] || 0;
 
     const prev = last[id];
 
     if(prev){
 
-      let dist =
+      const dist =
         Math.abs(nl - prev.lat) +
         Math.abs(no - prev.lon);
 
@@ -279,18 +285,14 @@ function animate(){
 
         let raw = bearing(prev.lat, prev.lon, nl, no);
 
-        if(!headingState[id]) headingState[id] = raw;
-
-        let diff = raw - headingState[id];
+        let diff = raw - ang;
 
         if(diff > 180) diff -= 360;
         if(diff < -180) diff += 360;
 
-        headingState[id] += diff * 0.2;
+        ang += diff * 0.2;
 
-        ang = headingState[id];
-      } else {
-        ang = headingState[id] || 0;
+        headingState[id] = ang;
       }
     }
 
@@ -318,32 +320,27 @@ animate();
 /* =========================
    LIST
 ========================= */
-function render(list){
+function render(d){
 
   const el = document.getElementById("list");
-  el.innerHTML = "";
 
-  list.forEach(d=>{
-    names[d.deviceId] = d.name;
+  const div = document.createElement("div");
+  div.className = "device";
 
-    const div = document.createElement("div");
-    div.className = "device";
+  div.innerHTML = `
+    <b>${d.name}</b><br>
+    🚗 ${d.speed} km/h<br>
+    🔋 ${d.battery}%
+  `;
 
-    div.innerHTML = `
-      <b>${d.name}</b><br>
-      🚗 ${d.speed} km/h<br>
-      🔋 ${d.battery}%
-    `;
+  div.onclick = ()=>{
+    followedId = d.deviceId;
+    navigationMode = true;
+    showInfo(d);
+    map.setView([d.lat, d.lon], 17);
+  };
 
-    div.onclick = ()=>{
-      followedId = d.deviceId;
-      navigationMode = true;
-      showInfo(d);
-      map.setView([d.lat, d.lon], 17);
-    };
-
-    el.appendChild(div);
-  });
+  el.appendChild(div);
 }
 
 /* =========================
@@ -353,23 +350,29 @@ async function load(){
   const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data = await res.json();
 
-  render(data);
   data.forEach(update);
+  render(data);
 }
 
 load();
 
 /* =========================
-   WS
+   WS (DEBUG SAFE)
 ========================= */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
+ws.onopen = () => console.log("WS CONNECTED ✅");
+
 ws.onmessage = (m)=>{
+  console.log("WS:", m.data);
   const d = JSON.parse(m.data);
   update(d);
 };
 
+ws.onerror = (e)=> console.log("WS ERROR ❌", e);
+
 ws.onclose = ()=>{
+  console.log("WS CLOSED ⚠️ reconnecting...");
   setTimeout(()=>location.reload(), 2000);
 };
 
