@@ -129,7 +129,7 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   CAR CAMERA
+   CAR CAMERA (FIXED)
 ========================= */
 function followCar(lat, lon, heading) {
 
@@ -288,7 +288,7 @@ function update(d){
 }
 
 /* =========================
-   ENGINE
+   ENGINE (FIXED + STABLE)
 ========================= */
 function animate(){
 
@@ -299,6 +299,7 @@ function animate(){
 
     if(!c||!t) return;
 
+    // smoothing position
     const nl=c.lat + (t.lat - c.lat)*0.12;
     const no=c.lon + (t.lon - c.lon)*0.12;
 
@@ -331,6 +332,7 @@ function animate(){
       markers[id].setIcon(icon(ang,names[id]||""));
     }
 
+    // NAVIGATION MODE
     if(navigationMode && id===followedId){
       followCar(nl,no,ang);
     }
@@ -356,6 +358,7 @@ async function load(){
   const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data=await res.json();
 
+  render(data);
   data.forEach(update);
 }
 
