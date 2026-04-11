@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS CLEAN HEADING FIX</title>
+<title>GPS FAKE MOTION ENGINE</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -51,7 +51,7 @@ body {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS HEADING FIX</b>
+  <b>🚗 FAKE MOTION GPS</b>
   <hr>
   <div id="list"></div>
   <hr>
@@ -62,6 +62,9 @@ body {
 
 <script>
 
+/* =========================
+   MAP
+========================= */
 const map = L.map("map").setView([47.09, 15.42], 14);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -74,7 +77,8 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const markers = {};
 const rendered = new Set();
 
-const lastGPS = {};
+const smooth = {};
+const lastRaw = {};
 const heading = {};
 
 /* =========================
@@ -86,7 +90,20 @@ function n(v){
 }
 
 /* =========================
-   BEARING (CORRECT)
+   HELPERS
+========================= */
+function lerp(a,b,t){
+  return a + (b - a) * t;
+}
+
+function distance(a,b){
+  const dx = a.lat - b.lat;
+  const dy = a.lon - b.lon;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+/* =========================
+   HEADING (CORRECT)
 ========================= */
 function bearing(lat1, lon1, lat2, lon2){
 
@@ -145,7 +162,7 @@ function icon(name, angle){
 }
 
 /* =========================
-   UPDATE
+   UPDATE (RAW → SMOOTH)
 ========================= */
 function update(d){
 
@@ -156,40 +173,66 @@ function update(d){
 
   if(lat === null || lon === null) return;
 
-  /* heading based on RAW GPS */
-  const prev = lastGPS[id];
+  const raw = {lat, lon};
 
-  let ang = heading[id] || 0;
+  lastRaw[id] = raw;
 
-  if(prev){
-    ang = bearing(prev.lat, prev.lon, lat, lon);
-    heading[id] = ang;
+  if(!smooth[id]){
+    smooth[id] = {lat, lon};
   }
 
-  lastGPS[id] = {lat, lon};
+  if(!heading[id]){
+    heading[id] = 0;
+  }
 
-  /* marker */
+  const prev = smooth[id];
+
+  /* REAL HEADING */
+  heading[id] = bearing(prev.lat, prev.lon, lat, lon);
+
+  /* STORE TARGET */
+  smooth[id].target = raw;
+
+  /* MARKER INIT */
   if(!markers[id]){
     markers[id] = L.marker([lat, lon], {
-      icon: icon(d.name, ang)
+      icon: icon(d.name, heading[id])
     }).addTo(map);
-
-    markers[id].on("click",()=>{
-      map.setView([lat, lon], 17);
-      showInfo(d);
-    });
-  } else {
-    markers[id].setLatLng([lat, lon]);
-    markers[id].setIcon(icon(d.name, ang));
   }
 
-  renderListOnce(d);
+  renderList(d);
 }
+
+/* =========================
+   ANIMATION LOOP (FAKE MOTION ENGINE)
+========================= */
+function animate(){
+
+  Object.keys(smooth).forEach(id => {
+
+    const s = smooth[id];
+    if(!s.target) return;
+
+    /* smooth movement */
+    s.lat = lerp(s.lat, s.target.lat, 0.15);
+    s.lon = lerp(s.lon, s.target.lon, 0.15);
+
+    if(markers[id]){
+      markers[id].setLatLng([s.lat, s.lon]);
+      markers[id].setIcon(icon(lastRaw[id]?.name || "?", heading[id]));
+    }
+
+  });
+
+  requestAnimationFrame(animate);
+}
+
+animate();
 
 /* =========================
    LIST (NO DUPLICATES)
 ========================= */
-function renderListOnce(d){
+function renderList(d){
 
   if(rendered.has(d.deviceId)) return;
   rendered.add(d.deviceId);
@@ -199,15 +242,14 @@ function renderListOnce(d){
   const div = document.createElement("div");
   div.className="device";
 
-  div.innerHTML = `
+  div.innerHTML=`
     <b>${d.name}</b><br>
     🚗 ${d.speed} km/h<br>
     🔋 ${d.battery}%
   `;
 
-  div.onclick = ()=>{
+  div.onclick=()=>{
     map.setView([d.lat, d.lon], 17);
-    showInfo(d);
   };
 
   el.appendChild(div);
@@ -221,7 +263,6 @@ function showInfo(d){
     <b>${d.name}</b><br><br>
     🚗 ${d.speed} km/h<br>
     🔋 ${d.battery}%<br>
-    📡 ${d.status || "-"}<br>
   `;
 }
 
@@ -245,9 +286,7 @@ const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 ws.onmessage = (m)=>{
   try{
     update(JSON.parse(m.data));
-  } catch(e){
-    console.log("WS ERROR");
-  }
+  }catch(e){}
 };
 
 </script>
