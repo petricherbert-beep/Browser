@@ -1,22 +1,66 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>GPS Tracker</title>
+<meta charset="utf-8" />
+<title>GPS Tracker</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <style>
-    body { margin:0; }
-    #map { height:100vh; }
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
 
-    .arrow-icon div {
-      transition: transform 0.3s linear;
-    }
-  </style>
+#map {
+  height: 100vh;
+}
+
+/* 🧭 Control Panel */
+#panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 9999;
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
+  width: 260px;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.device {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.device:hover {
+  background: #f5f5f5;
+}
+
+.online { color: #2ecc71; }
+.idle { color: #f1c40f; }
+.offline { color: #e74c3c; }
+
+/* ➤ Marker */
+.arrow-icon div {
+  font-size: 28px;
+  transition: transform 0.3s linear;
+  text-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+</style>
 </head>
+
 <body>
+
+<div id="panel">
+  <b>📡 Devices</b>
+  <div id="list"></div>
+</div>
 
 <div id="map"></div>
 
@@ -32,7 +76,7 @@ const lastPositions = {};
 const lastAngles = {};
 let followedDevice = null;
 
-// Richtung berechnen
+/* 🧭 Bearing */
 function getBearing(lat1, lon1, lat2, lon2) {
   const toRad = d => d * Math.PI / 180;
   const toDeg = r => r * 180 / Math.PI;
@@ -46,30 +90,53 @@ function getBearing(lat1, lon1, lat2, lon2) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-// Pfeil Icon
-function createArrow(angle, active=false) {
+/* ➤ Icon */
+function createArrowIcon(angle, status="online") {
+  let color = "#2ecc71";
+  if (status === "idle") color = "#f1c40f";
+  if (status === "offline") color = "#e74c3c";
+
   return L.divIcon({
-    html: `<div style="transform: rotate(${angle}deg); font-size:26px; color:${active?'red':'black'}">➤</div>`,
+    className: "",
+    html: `
+      <div style="
+        transform: rotate(${angle}deg);
+        color:${color};
+      ">➤</div>
+    `,
     iconSize: [30,30],
     iconAnchor: [15,15]
   });
 }
 
-// Marker klick → Tracking aktivieren
-function attachClick(marker, deviceId) {
-  marker.on("click", async () => {
-    followedDevice = deviceId;
+/* 📊 Liste */
+function renderList(devices) {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
 
-    await fetch(`https://gps-server-f9b6.onrender.com/devices/${deviceId}/watch?watcherId=web`, { method:"POST" });
-    await fetch(`https://gps-server-f9b6.onrender.com/devices/${deviceId}/wakeup`, { method:"POST" });
+  devices.forEach(d => {
+    const div = document.createElement("div");
+    div.className = "device";
 
-    alert("Tracking aktiv für " + deviceId);
+    div.innerHTML = `
+      <b>${d.name || d.deviceId}</b><br>
+      <small class="${d.status}">● ${d.status}</small><br>
+      🔋 ${d.battery}% | 🚗 ${d.speed} km/h
+    `;
+
+    div.onclick = () => {
+      map.setView([d.lat, d.lon], 17);
+      markers[d.deviceId]?.openPopup();
+      followedDevice = d.deviceId;
+    };
+
+    list.appendChild(div);
   });
 }
 
-// Update
+/* 📍 Update Device */
 function updateDevice(d) {
-  const { deviceId, lat, lon, speed } = d;
+  const { deviceId, lat, lon, speed, battery, accuracy, name, status } = d;
 
   let angle = lastAngles[deviceId] || 0;
 
@@ -86,25 +153,51 @@ function updateDevice(d) {
   lastPositions[deviceId] = { lat, lon };
 
   if (!markers[deviceId]) {
-    const m = L.marker([lat, lon], { icon: createArrow(angle) }).addTo(map);
-    attachClick(m, deviceId);
-    markers[deviceId] = m;
+    const marker = L.marker([lat, lon], {
+      icon: createArrowIcon(angle, status)
+    }).addTo(map);
+
+    marker.bindPopup(`
+      <div>
+        <b>📱 ${name || deviceId}</b><br><br>
+
+        📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}<br>
+        🚗 Speed: ${speed} km/h<br>
+        🔋 Battery: ${battery}%<br>
+        🎯 Accuracy: ${accuracy} m<br>
+        📡 Status: ${status}
+      </div>
+    `);
+
+    markers[deviceId] = marker;
   } else {
     markers[deviceId].setLatLng([lat, lon]);
-    markers[deviceId].setIcon(createArrow(angle, followedDevice === deviceId));
+    markers[deviceId].setIcon(createArrowIcon(angle, status));
   }
 
   if (followedDevice === deviceId) {
-    map.setView([lat, lon], 17);
+    map.setView([lat, lon], 17, { animate: true });
   }
 }
 
-// WebSocket
+/* 🌐 Load initial */
+async function loadDevices() {
+  const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const devices = await res.json();
+
+  devices.forEach(updateDevice);
+  renderList(devices);
+}
+
+loadDevices();
+
+/* 📡 WebSocket */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
 ws.onmessage = (msg) => {
   const data = JSON.parse(msg.data);
   updateDevice(data);
+  loadDevices();
 };
 </script>
 
