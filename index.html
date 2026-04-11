@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS VECTOR FIX</title>
+<title>GPS ULTRA PRO</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -18,30 +18,50 @@ body {
   height: 100vh;
 }
 
+/* PANEL */
 #panel {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 9999;
 
-  width: 320px;
+  width: 330px;
   max-height: 85vh;
   overflow: auto;
 
-  background: rgba(20,20,20,0.85);
+  background: rgba(20,20,20,0.78);
+  backdrop-filter: blur(14px);
   color: white;
-  padding: 12px;
-  border-radius: 12px;
+
+  padding: 14px;
+  border-radius: 14px;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
 .device {
-  padding: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   cursor: pointer;
 }
 
 .device:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
+}
+
+button {
+  margin-top:6px;
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:none;
+  background:#1f1f1f;
+  color:white;
+  cursor:pointer;
+}
+
+button:hover {
+  background:#2a2a2a;
 }
 </style>
 </head>
@@ -49,55 +69,94 @@ body {
 <body>
 
 <div id="panel">
-  <b>🚗 VECTOR TRACKER</b>
+  <b>🚗 ULTRA PRO TRACKER</b>
+
+  <div style="margin-top:8px;">
+    <button onclick="toggleCompass()">🧭 Compass Mode</button>
+    <button onclick="navigationMode=true">📍 Navigation Mode</button>
+  </div>
+
   <hr>
+
   <div id="list"></div>
+
+  <hr>
+
+  <div id="infoBox">👆 Select device</div>
 </div>
 
 <div id="map"></div>
 
 <script>
 
-/* ================= MAP ================= */
+/* =========================
+   MAP
+========================= */
 const map = L.map("map").setView([47.09, 15.42], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap"
 }).addTo(map);
 
-/* ================= STATE ================= */
+/* =========================
+   STATE
+========================= */
 const markers = {};
-const lastPos = {};
-const rendered = new Set();
+const current = {};
+const target = {};
+const last = {};
+const headingState = {};
+const names = {};
 
-/* ================= SAFE ================= */
-const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
+let followedId = null;
+let navigationMode = false;
+let compassMode = false;
 
-/* ================= VECTOR HEADING ================= */
-function bearing(lat1, lon1, lat2, lon2){
+/* =========================
+   BEARING
+========================= */
+function bearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d*Math.PI/180;
+  const toDeg = r => r*180/Math.PI;
 
-  const toRad = x => x * Math.PI / 180;
-  const toDeg = x => x * 180 / Math.PI;
-
-  const dLon = toRad(lon2 - lon1);
-
-  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const dLon = toRad(lon2-lon1);
+  const y = Math.sin(dLon)*Math.cos(toRad(lat2));
   const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    Math.cos(toRad(lat1))*Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLon);
 
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  return (toDeg(Math.atan2(y,x)) + 360) % 360;
 }
 
-/* ================= ICON ================= */
-function icon(name, angle){
+/* =========================
+   CAR CAMERA
+========================= */
+function followCar(lat, lon, heading) {
 
-  const color =
-    name?.toLowerCase().includes("nicole") ? "#ff3b30" :
-    name?.toLowerCase().includes("oliver") ? "#0a84ff" :
-    "#2ecc71";
+  const offset = 0.0012;
+  const rad = heading * Math.PI / 180;
 
-  const letter = name?.[0]?.toUpperCase() || "?";
+  const camLat = lat - Math.cos(rad) * offset;
+  const camLon = lon - Math.sin(rad) * offset;
+
+  map.setView([camLat, camLon], map.getZoom(), {
+    animate: true,
+    duration: 0.25
+  });
+}
+
+/* =========================
+   ICON
+========================= */
+function icon(angle,name="") {
+
+  const n = (name||"").toLowerCase();
+
+  let color = "#2ecc71";
+  if (n.includes("nicole")) color = "#ff3b30";
+  if (n.includes("oliver")) color = "#0a84ff";
+
+  const initial = name ? name[0].toUpperCase() : "?";
 
   return L.divIcon({
     className:"",
@@ -106,8 +165,8 @@ function icon(name, angle){
         transform:rotate(${angle}deg);
         font-size:42px;
         color:${color};
-        text-shadow:0 0 4px black;
         position:relative;
+        text-shadow:0 0 6px rgba(0,0,0,0.6);
       ">
         ➤
         <div style="
@@ -116,85 +175,200 @@ function icon(name, angle){
           left:50%;
           transform:translate(-50%,-50%) rotate(-${angle}deg);
           color:white;
-          font-size:13px;
-          font-weight:bold;
+          font-size:14px;
+          font-weight:800;
         ">
-          ${letter}
+          ${initial}
         </div>
       </div>
     `,
-    iconSize:[42,42],
-    iconAnchor:[21,21]
+    iconSize:[44,44],
+    iconAnchor:[22,22]
   });
 }
 
-/* ================= UPDATE ================= */
+/* =========================
+   INFO PANEL
+========================= */
+function showInfo(d){
+  document.getElementById("infoBox").innerHTML=`
+    <b>${d.name}</b><br><br>
+
+    🚗 ${d.speed} km/h<br>
+    🔋 ${d.battery}%<br>
+    🎯 ${d.accuracy} m<br>
+    📡 ${d.status}<br>
+
+    <hr>
+
+    <button onclick="setAlarm('${d.deviceId}', true)">🚨 Alarm ON</button>
+    <button onclick="setAlarm('${d.deviceId}', false)">🔕 Alarm OFF</button>
+
+    <button onclick="watch('${d.deviceId}')">👁 Watch ON</button>
+    <button onclick="unwatch('${d.deviceId}')">🚫 Watch OFF</button>
+  `;
+}
+
+/* =========================
+   API
+========================= */
+async function setAlarm(id,v){
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
+}
+
+async function watch(id){
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
+}
+
+async function unwatch(id){
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
+
+/* =========================
+   LIST
+========================= */
+function render(list){
+
+  const el=document.getElementById("list");
+  el.innerHTML="";
+
+  list.forEach(d=>{
+    names[d.deviceId]=d.name;
+
+    const div=document.createElement("div");
+    div.className="device";
+
+    div.innerHTML=`
+      <b>${d.name}</b><br>
+      🚗 ${d.speed} km/h<br>
+      🔋 ${d.battery}%
+    `;
+
+    div.onclick=()=>{
+      followedId=d.deviceId;
+      navigationMode=true;
+      showInfo(d);
+      map.setView([d.lat,d.lon],17);
+    };
+
+    el.appendChild(div);
+  });
+}
+
+/* =========================
+   UPDATE
+========================= */
 function update(d){
 
-  const id = d.deviceId;
+  const {deviceId,lat,lon}=d;
 
-  const lat = n(d.lat);
-  const lon = n(d.lon);
+  names[deviceId]=d.name;
 
-  if(lat === null || lon === null) return;
+  target[deviceId]={lat,lon};
 
-  const prev = lastPos[id];
-
-  let angle = 0;
-
-  if(prev){
-    angle = bearing(prev.lat, prev.lon, lat, lon);
+  if(!current[deviceId]){
+    current[deviceId]={lat,lon};
   }
 
-  lastPos[id] = {lat, lon};
-
-  if(!markers[id]){
-    markers[id] = L.marker([lat, lon], {
-      icon: icon(d.name, angle)
+  if(!markers[deviceId]){
+    markers[deviceId]=L.marker([lat,lon],{
+      icon:icon(0,d.name)
     }).addTo(map);
-  } else {
-    markers[id].setLatLng([lat, lon]);
-    markers[id].setIcon(icon(d.name, angle));
+
+    markers[deviceId].on("click",()=>{
+      followedId=deviceId;
+      navigationMode=true;
+      showInfo(d);
+    });
   }
 
-  renderList(d);
+  if(followedId===deviceId){
+    showInfo(d);
+  }
 }
 
-/* ================= LIST ================= */
-function renderList(d){
+/* =========================
+   ENGINE
+========================= */
+function animate(){
 
-  if(rendered.has(d.deviceId)) return;
-  rendered.add(d.deviceId);
+  Object.keys(target).forEach(id=>{
 
-  const el = document.getElementById("list");
+    const c=current[id];
+    const t=target[id];
 
-  const div = document.createElement("div");
-  div.className = "device";
+    if(!c||!t) return;
 
-  div.innerHTML = `<b>${d.name}</b>`;
+    const nl=c.lat + (t.lat - c.lat)*0.12;
+    const no=c.lon + (t.lon - c.lon)*0.12;
 
-  div.onclick = () => {
-    map.setView([d.lat, d.lon], 17);
-  };
+    let ang=0;
 
-  el.appendChild(div);
+    const prev=last[id];
+
+    if(prev){
+      let raw=bearing(prev.lat,prev.lon,nl,no);
+
+      if(!headingState[id]) headingState[id]=raw;
+
+      let diff=raw-headingState[id];
+
+      if(diff>180) diff-=360;
+      if(diff<-180) diff+=360;
+
+      headingState[id]+=diff*0.18;
+
+      ang=headingState[id];
+    }
+
+    last[id]={lat:nl,lon:no};
+
+    c.lat=nl;
+    c.lon=no;
+
+    if(markers[id]){
+      markers[id].setLatLng([nl,no]);
+      markers[id].setIcon(icon(ang,names[id]||""));
+    }
+
+    if(navigationMode && id===followedId){
+      followCar(nl,no,ang);
+    }
+
+  });
+
+  requestAnimationFrame(animate);
 }
 
-/* ================= LOAD ================= */
+animate();
+
+/* =========================
+   MODE
+========================= */
+function toggleCompass(){
+  compassMode=!compassMode;
+}
+
+/* =========================
+   LOAD
+========================= */
 async function load(){
-  const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const data = await res.json();
+  const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data=await res.json();
+
   data.forEach(update);
 }
+
 load();
 
-/* ================= WS ================= */
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+/* =========================
+   WS
+========================= */
+const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-ws.onmessage = (m)=>{
-  try {
-    update(JSON.parse(m.data));
-  } catch(e){}
+ws.onmessage=(m)=>{
+  const d=JSON.parse(m.data);
+  update(d);
 };
 
 </script>
