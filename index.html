@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS ULTRA PRO - GOOGLE CAMERA</title>
+<title>GPS DEBUG ULTRA PRO</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -25,11 +25,11 @@ body {
   left: 12px;
   z-index: 9999;
 
-  width: 330px;
+  width: 340px;
   max-height: 85vh;
   overflow: auto;
 
-  background: rgba(20,20,20,0.78);
+  background: rgba(20,20,20,0.85);
   backdrop-filter: blur(14px);
   color: white;
 
@@ -56,6 +56,16 @@ button {
   background:#1f1f1f;
   color:white;
   cursor:pointer;
+  font-size:12px;
+}
+
+#log {
+  font-size: 11px;
+  max-height: 120px;
+  overflow:auto;
+  background:#000;
+  padding:6px;
+  margin-top:10px;
 }
 </style>
 </head>
@@ -63,13 +73,11 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS PRO - GOOGLE CAMERA</b>
+  <b>🚗 GPS DEBUG SYSTEM</b>
 
-  <div style="margin-top:8px;">
-    <button onclick="navigationMode = !navigationMode">
-      📍 Navigation Mode
-    </button>
-  </div>
+  <button onclick="navigationMode=!navigationMode">
+    📍 Toggle Navigation
+  </button>
 
   <hr>
 
@@ -78,20 +86,20 @@ button {
   <hr>
 
   <div id="infoBox">👆 Select device</div>
+
+  <div id="log"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
 
-console.log("SCRIPT LOADED");
+console.log("SCRIPT START");
 
 /* =========================
    MAP
 ========================= */
-const map = L.map("map", {
-  zoomControl: true
-}).setView([47.09, 15.42], 15);
+const map = L.map("map").setView([47.09, 15.42], 14);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap"
@@ -107,6 +115,15 @@ let followedId = null;
 let navigationMode = false;
 
 /* =========================
+   DEBUG LOG
+========================= */
+function log(msg){
+  console.log(msg);
+  const el = document.getElementById("log");
+  el.innerHTML = msg + "<br>" + el.innerHTML;
+}
+
+/* =========================
    SAFE NUMBER
 ========================= */
 function n(v){
@@ -115,7 +132,7 @@ function n(v){
 }
 
 /* =========================
-   ICON
+   ICON (VISIBLE + OUTLINE)
 ========================= */
 function icon(angle, name="") {
 
@@ -129,9 +146,27 @@ function icon(angle, name="") {
   return L.divIcon({
     className:"",
     html:`
-      <div style="transform:rotate(${angle}deg);font-size:42px;color:${color};">
+      <div style="
+        position:relative;
+        transform:rotate(${angle}deg);
+        font-size:44px;
+        color:${color};
+        text-shadow:
+          -1px -1px 0 black,
+           1px -1px 0 black,
+          -1px  1px 0 black,
+           1px  1px 0 black;
+      ">
         ➤
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-${angle}deg);color:white;font-size:14px;font-weight:800;">
+        <div style="
+          position:absolute;
+          top:50%;
+          left:50%;
+          transform:translate(-50%,-50%) rotate(-${angle}deg);
+          color:white;
+          font-size:14px;
+          font-weight:800;
+        ">
           ${initial}
         </div>
       </div>
@@ -160,33 +195,6 @@ function bearing(a,b,c,d){
 }
 
 /* =========================
-   GOOGLE STYLE CAMERA
-========================= */
-function followGoogle(lat, lon, heading){
-
-  if(!n(lat) || !n(lon)) return;
-
-  const zoom = map.getZoom();
-
-  /* Distance ahead of car (like navigation preview) */
-  const forwardOffset = 0.0022;
-
-  const rad = heading * Math.PI / 180;
-
-  const aheadLat = lat + Math.cos(rad) * forwardOffset;
-  const aheadLon = lon + Math.sin(rad) * forwardOffset;
-
-  map.flyTo(
-    [aheadLat, aheadLon],
-    zoom,
-    {
-      animate: true,
-      duration: 0.6
-    }
-  );
-}
-
-/* =========================
    INFO
 ========================= */
 function showInfo(d){
@@ -200,14 +208,19 @@ function showInfo(d){
 }
 
 /* =========================
-   UPDATE
+   UPDATE CORE
 ========================= */
 function update(d){
+
+  log("UPDATE " + d.deviceId + " " + d.lat + "," + d.lon);
 
   const lat = n(d.lat);
   const lon = n(d.lon);
 
-  if(lat === null || lon === null) return;
+  if(lat === null || lon === null){
+    log("❌ INVALID DATA");
+    return;
+  }
 
   const id = d.deviceId;
 
@@ -238,9 +251,14 @@ function update(d){
     markers[id].setIcon(icon(ang, d.name));
   }
 
-  /* GOOGLE CAMERA FOLLOW */
   if(navigationMode && id === followedId){
-    followGoogle(lat, lon, ang);
+    const offset = 0.0009;
+    const rad = ang * Math.PI / 180;
+
+    map.panTo([
+      lat + Math.cos(rad)*offset,
+      lon + Math.sin(rad)*offset
+    ], {animate:true, duration:0.25});
   }
 
   if(followedId === id){
@@ -288,15 +306,22 @@ async function load(){
 load();
 
 /* =========================
-   WS
+   WS DEBUG
 ========================= */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
+ws.onopen = ()=>log("WS CONNECTED");
+
 ws.onmessage = (m)=>{
+  log("WS RAW " + m.data);
   try{
     update(JSON.parse(m.data));
-  }catch(e){}
+  }catch(e){
+    log("PARSE ERROR");
+  }
 };
+
+ws.onerror = (e)=>log("WS ERROR");
 
 </script>
 
