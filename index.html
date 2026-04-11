@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Tracker</title>
+<title>GPS PRO TRACKER</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -25,12 +25,12 @@ body {
   left: 12px;
   z-index: 9999;
 
-  width: 300px;
+  width: 320px;
   max-height: 85vh;
   overflow: auto;
 
   background: rgba(20,20,20,0.75);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
   color: white;
 
   padding: 14px;
@@ -49,23 +49,41 @@ body {
   background: rgba(255,255,255,0.06);
 }
 
-.online { color: #2ecc71; }
-.idle { color: #f1c40f; }
-.offline { color: #e74c3c; }
+button {
+  margin-top:6px;
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:none;
+  background:#1f1f1f;
+  color:white;
+  cursor:pointer;
+}
+
+button:hover {
+  background:#2a2a2a;
+}
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <b>📡 Tracker</b>
+  <b>🚗 PRO TRACKER</b>
+
+  <div style="margin-top:8px;">
+    <button onclick="toggleCompass()">🧭 Compass Mode</button>
+    <button onclick="navigationMode=true">📍 Navigation Mode</button>
+  </div>
+
+  <hr>
+
   <div id="list"></div>
 
-  <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:10px 0;">
+  <hr>
 
-  <!-- 📊 INFO PANEL -->
-  <div id="infoBox" style="font-size:14px; line-height:1.5; opacity:0.95;">
-    👆 Wähle ein Gerät
+  <div id="infoBox">
+    👆 Select device
   </div>
 </div>
 
@@ -73,6 +91,9 @@ body {
 
 <script>
 
+/* =========================
+   MAP
+========================= */
 const map = L.map("map").setView([47.09, 15.42], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -83,14 +104,17 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
    STATE
 ========================= */
 const markers = {};
-const currentPos = {};
-const targetPos = {};
-const lastPos = {};
-const idToName = {};
-let followId = null;
+const current = {};
+const target = {};
+const last = {};
+const names = {};
+
+let followedId = null;
+let navigationMode = false;
+let compassMode = false;
 
 /* =========================
-   HELPERS
+   MATH
 ========================= */
 function lerp(a,b,t){ return a + (b-a)*t; }
 
@@ -108,34 +132,34 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   ICON (PFEIL + INITIAL)
+   ICON
 ========================= */
-function createArrowIcon(angle, name="") {
+function icon(angle,name="") {
 
-  const n = (name || "").toLowerCase();
+  const n = (name||"").toLowerCase();
 
   let color = "#2ecc71";
   if (n.includes("nicole")) color = "#ff3b30";
   if (n.includes("oliver")) color = "#0a84ff";
 
-  const initial = name ? name.charAt(0).toUpperCase() : "?";
+  const initial = name ? name[0].toUpperCase() : "?";
 
   return L.divIcon({
-    className: "",
-    html: `
+    className:"",
+    html:`
       <div style="
-        transform: rotate(${angle}deg);
-        font-size: 42px;
+        transform:rotate(${angle}deg);
+        font-size:42px;
         color:${color};
-        position: relative;
-        text-shadow: 0 0 6px rgba(0,0,0,0.6);
+        position:relative;
+        text-shadow:0 0 6px rgba(0,0,0,0.6);
       ">
         ➤
         <div style="
           position:absolute;
           top:50%;
           left:50%;
-          transform: translate(-50%,-50%) rotate(-${angle}deg);
+          transform:translate(-50%,-50%) rotate(-${angle}deg);
           color:white;
           font-size:14px;
           font-weight:800;
@@ -144,60 +168,66 @@ function createArrowIcon(angle, name="") {
         </div>
       </div>
     `,
-    iconSize: [44,44],
-    iconAnchor: [22,22]
+    iconSize:[44,44],
+    iconAnchor:[22,22]
   });
 }
 
 /* =========================
    INFO PANEL
 ========================= */
-function showInfo(d) {
-  const box = document.getElementById("infoBox");
-
-  box.innerHTML = `
-    <div style="font-size:16px; font-weight:700; margin-bottom:6px;">
-      📍 ${d.name}
-    </div>
-
-    🚗 Speed: ${d.speed} km/h<br>
-    🔋 Battery: ${d.battery}%<br>
-    🎯 Accuracy: ${d.accuracy} m<br>
-    📡 Status: ${d.status}<br>
-
-    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:8px 0;">
-
-    📌 Lat: ${d.lat.toFixed(5)}<br>
-    📌 Lon: ${d.lon.toFixed(5)}
+function showInfo(d){
+  document.getElementById("infoBox").innerHTML=`
+    <b>${d.name}</b><br><br>
+    🚗 ${d.speed} km/h<br>
+    🔋 ${d.battery}%<br>
+    🎯 ${d.accuracy} m<br>
+    📡 ${d.status}<br>
   `;
+}
+
+/* =========================
+   CONTROL API
+========================= */
+async function setAlarm(id,v){
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
+}
+
+async function watch(id){
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
+}
+
+async function unwatch(id){
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
 }
 
 /* =========================
    LIST
 ========================= */
-function renderList(devs){
-  const list=document.getElementById("list");
-  list.innerHTML="";
+function render(list){
+  const el=document.getElementById("list");
+  el.innerHTML="";
 
-  devs.forEach(d=>{
-    idToName[d.deviceId]=d.name;
+  list.forEach(d=>{
+    names[d.deviceId]=d.name;
 
     const div=document.createElement("div");
     div.className="device";
 
     div.innerHTML=`
       <b>${d.name}</b><br>
-      <small class="${d.status}">● ${d.status}</small><br>
-      🔋 ${d.battery}% | 🚗 ${d.speed} km/h
+      🚗 ${d.speed} km/h<br>
+      🔋 ${d.battery}%
     `;
 
     div.onclick=()=>{
-      followId=d.deviceId;
+      followedId=d.deviceId;
+      navigationMode=true;
       showInfo(d);
       map.setView([d.lat,d.lon],17);
     };
 
-    list.appendChild(div);
+    el.appendChild(div);
   });
 }
 
@@ -208,42 +238,42 @@ function update(d){
 
   const {deviceId,lat,lon,speed,battery,accuracy,name,status}=d;
 
-  idToName[deviceId]=name;
+  names[deviceId]=name;
 
-  targetPos[deviceId]={lat,lon};
+  target[deviceId]={lat,lon};
 
-  if(!currentPos[deviceId]){
-    currentPos[deviceId]={lat,lon};
+  if(!current[deviceId]){
+    current[deviceId]={lat,lon};
   }
 
   if(!markers[deviceId]){
-    const m=L.marker([lat,lon],{
-      icon:createArrowIcon(0,name)
+    markers[deviceId]=L.marker([lat,lon],{
+      icon:icon(0,name)
     }).addTo(map);
 
-    m.on("click",()=>{
-      followId=deviceId;
+    markers[deviceId].on("click",()=>{
+      followedId=deviceId;
+      navigationMode=true;
       showInfo(d);
-      map.setView([lat,lon],17);
     });
-
-    markers[deviceId]=m;
   }
 
-  if(followId===deviceId){
+  if(followedId===deviceId){
     showInfo(d);
   }
 }
 
 /* =========================
-   ANIMATION
+   ANIMATION ENGINE
 ========================= */
+let rotation=0;
+
 function animate(){
 
-  Object.keys(targetPos).forEach(id=>{
+  Object.keys(target).forEach(id=>{
 
-    const c=currentPos[id];
-    const t=targetPos[id];
+    const c=current[id];
+    const t=target[id];
 
     if(!c||!t) return;
 
@@ -252,22 +282,30 @@ function animate(){
 
     let ang=0;
 
-    if(lastPos[id]){
-      ang=bearing(lastPos[id].lat,lastPos[id].lon,nl,no);
+    if(last[id]){
+      ang=bearing(last[id].lat,last[id].lon,nl,no);
     }
 
-    lastPos[id]=t;
+    last[id]=t;
 
     c.lat=nl;
     c.lon=no;
 
     if(markers[id]){
       markers[id].setLatLng([nl,no]);
-      markers[id].setIcon(createArrowIcon(ang,idToName[id]||""));
+      markers[id].setIcon(icon(ang,names[id]));
     }
 
-    if(followId===id){
+    /* 📍 Navigation Mode */
+    if(navigationMode && id===followedId){
       map.setView([nl,no],map.getZoom(),{animate:false});
+    }
+
+    /* 🧭 Compass Mode */
+    if(compassMode && id===followedId){
+      rotation=-ang;
+      document.querySelector(".leaflet-map-pane").style.transform=
+        `rotate(${rotation}deg)`;
     }
 
   });
@@ -278,14 +316,20 @@ function animate(){
 animate();
 
 /* =========================
+   MODE
+========================= */
+function toggleCompass(){
+  compassMode=!compassMode;
+}
+
+/* =========================
    LOAD
 ========================= */
 async function load(){
   const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data=await res.json();
-
+  render(data);
   data.forEach(update);
-  renderList(data);
 }
 
 load();
@@ -298,7 +342,6 @@ const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 ws.onmessage=(m)=>{
   const d=JSON.parse(m.data);
   update(d);
-  load();
 };
 
 </script>
