@@ -17,7 +17,7 @@ body {
   height: 100vh;
 }
 
-/* 🧭 Control Panel */
+/* 📋 Panel */
 #panel {
   position: absolute;
   top: 10px;
@@ -48,9 +48,8 @@ body {
 
 /* ➤ Marker */
 .arrow-icon div {
-  font-size: 28px;
   transition: transform 0.3s linear;
-  text-shadow: 0 0 4px rgba(0,0,0,0.3);
+  text-shadow: 0 0 6px rgba(0,0,0,0.4);
 }
 </style>
 </head>
@@ -65,6 +64,7 @@ body {
 <div id="map"></div>
 
 <script>
+
 const map = L.map("map").setView([47.09, 15.42], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -76,7 +76,7 @@ const lastPositions = {};
 const lastAngles = {};
 let followedDevice = null;
 
-/* 🧭 Bearing */
+/* 🧭 Richtung */
 function getBearing(lat1, lon1, lat2, lon2) {
   const toRad = d => d * Math.PI / 180;
   const toDeg = r => r * 180 / Math.PI;
@@ -90,26 +90,30 @@ function getBearing(lat1, lon1, lat2, lon2) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-/* ➤ Icon */
-function createArrowIcon(angle, status="online") {
-  let color = "#2ecc71";
-  if (status === "idle") color = "#f1c40f";
-  if (status === "offline") color = "#e74c3c";
+/* ➤ ICON (GRÖSSER + FARBE) */
+function createArrowIcon(angle, name="") {
+  let color = "#2ecc71"; // default grün
+
+  if (name.toLowerCase().includes("nicole")) color = "#e74c3c"; // rot
+  if (name.toLowerCase().includes("oliver")) color = "#3498db"; // blau
 
   return L.divIcon({
     className: "",
     html: `
       <div style="
         transform: rotate(${angle}deg);
+        font-size: 40px;
+        font-weight: bold;
         color:${color};
+        text-shadow: 0 0 6px rgba(0,0,0,0.4);
       ">➤</div>
     `,
-    iconSize: [30,30],
-    iconAnchor: [15,15]
+    iconSize: [50,50],
+    iconAnchor: [25,25]
   });
 }
 
-/* 📊 Liste */
+/* 📋 Liste */
 function renderList(devices) {
   const list = document.getElementById("list");
   list.innerHTML = "";
@@ -134,7 +138,7 @@ function renderList(devices) {
   });
 }
 
-/* 📍 Update Device */
+/* 📍 UPDATE */
 function updateDevice(d) {
   const { deviceId, lat, lon, speed, battery, accuracy, name, status } = d;
 
@@ -154,11 +158,11 @@ function updateDevice(d) {
 
   if (!markers[deviceId]) {
     const marker = L.marker([lat, lon], {
-      icon: createArrowIcon(angle, status)
+      icon: createArrowIcon(angle, name)
     }).addTo(map);
 
     marker.bindPopup(`
-      <div>
+      <div style="min-width:180px">
         <b>📱 ${name || deviceId}</b><br><br>
 
         📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}<br>
@@ -172,7 +176,7 @@ function updateDevice(d) {
     markers[deviceId] = marker;
   } else {
     markers[deviceId].setLatLng([lat, lon]);
-    markers[deviceId].setIcon(createArrowIcon(angle, status));
+    markers[deviceId].setIcon(createArrowIcon(angle, name));
   }
 
   if (followedDevice === deviceId) {
@@ -180,7 +184,7 @@ function updateDevice(d) {
   }
 }
 
-/* 🌐 Load initial */
+/* 📡 INIT LOAD */
 async function loadDevices() {
   const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
   const devices = await res.json();
@@ -191,7 +195,7 @@ async function loadDevices() {
 
 loadDevices();
 
-/* 📡 WebSocket */
+/* 🌐 WEBSOCKET */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
 ws.onmessage = (msg) => {
@@ -199,6 +203,7 @@ ws.onmessage = (msg) => {
   updateDevice(data);
   loadDevices();
 };
+
 </script>
 
 </body>
