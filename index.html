@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS FAKE MOTION ENGINE</title>
+<title>GPS STABLE TRACKING</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -51,7 +51,7 @@ body {
 <body>
 
 <div id="panel">
-  <b>🚗 FAKE MOTION GPS</b>
+  <b>🚗 STABLE GPS TRACKING</b>
   <hr>
   <div id="list"></div>
   <hr>
@@ -90,20 +90,14 @@ function n(v){
 }
 
 /* =========================
-   HELPERS
+   LERP
 ========================= */
 function lerp(a,b,t){
   return a + (b - a) * t;
 }
 
-function distance(a,b){
-  const dx = a.lat - b.lat;
-  const dy = a.lon - b.lon;
-  return Math.sqrt(dx*dx + dy*dy);
-}
-
 /* =========================
-   HEADING (CORRECT)
+   BEARING (RAW ONLY)
 ========================= */
 function bearing(lat1, lon1, lat2, lon2){
 
@@ -162,7 +156,7 @@ function icon(name, angle){
 }
 
 /* =========================
-   UPDATE (RAW → SMOOTH)
+   UPDATE (FIXED LOGIC)
 ========================= */
 function update(d){
 
@@ -175,28 +169,32 @@ function update(d){
 
   const raw = {lat, lon};
 
+  const prev = lastRaw[id];
+
+  // 🔥 ONLY RAW → HEADING
+  if(prev){
+    const dist =
+      Math.abs(prev.lat - lat) +
+      Math.abs(prev.lon - lon);
+
+    // noise filter
+    if(dist > 0.000005){
+      heading[id] = bearing(prev.lat, prev.lon, lat, lon);
+    }
+  }
+
   lastRaw[id] = raw;
 
   if(!smooth[id]){
     smooth[id] = {lat, lon};
   }
 
-  if(!heading[id]){
-    heading[id] = 0;
-  }
-
-  const prev = smooth[id];
-
-  /* REAL HEADING */
-  heading[id] = bearing(prev.lat, prev.lon, lat, lon);
-
-  /* STORE TARGET */
   smooth[id].target = raw;
 
-  /* MARKER INIT */
+  // marker init
   if(!markers[id]){
     markers[id] = L.marker([lat, lon], {
-      icon: icon(d.name, heading[id])
+      icon: icon(d.name, heading[id] || 0)
     }).addTo(map);
   }
 
@@ -204,7 +202,7 @@ function update(d){
 }
 
 /* =========================
-   ANIMATION LOOP (FAKE MOTION ENGINE)
+   ANIMATION LOOP
 ========================= */
 function animate(){
 
@@ -213,13 +211,16 @@ function animate(){
     const s = smooth[id];
     if(!s.target) return;
 
-    /* smooth movement */
+    // smooth movement
     s.lat = lerp(s.lat, s.target.lat, 0.15);
     s.lon = lerp(s.lon, s.target.lon, 0.15);
 
     if(markers[id]){
       markers[id].setLatLng([s.lat, s.lon]);
-      markers[id].setIcon(icon(lastRaw[id]?.name || "?", heading[id]));
+
+      markers[id].setIcon(
+        icon(lastRaw[id]?.name || "", heading[id] || 0)
+      );
     }
 
   });
@@ -253,17 +254,6 @@ function renderList(d){
   };
 
   el.appendChild(div);
-}
-
-/* =========================
-   INFO
-========================= */
-function showInfo(d){
-  document.getElementById("infoBox").innerHTML = `
-    <b>${d.name}</b><br><br>
-    🚗 ${d.speed} km/h<br>
-    🔋 ${d.battery}%<br>
-  `;
 }
 
 /* =========================
