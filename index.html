@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS ULTRA PRO</title>
+<title>GPS ULTRA PRO SAFE</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -63,10 +63,12 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 ULTRA PRO TRACKER</b>
+  <b>🚗 ULTRA PRO (CRASH SAFE)</b>
 
   <div style="margin-top:8px;">
-    <button onclick="navigationMode = !navigationMode">📍 Navigation Mode</button>
+    <button onclick="navigationMode = !navigationMode">
+      📍 Navigation Mode
+    </button>
   </div>
 
   <hr>
@@ -94,7 +96,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 /* =========================
-   STATE
+   STATE (SAFE INIT)
 ========================= */
 const markers = {};
 const current = {};
@@ -105,6 +107,14 @@ const names = {};
 
 let followedId = null;
 let navigationMode = false;
+
+/* =========================
+   SAFE NUMBER HELPER
+========================= */
+function safeNum(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 /* =========================
    ICON
@@ -127,7 +137,6 @@ function icon(angle, name="") {
         font-size: 42px;
         color: ${color};
         position: relative;
-        text-shadow: 0 0 6px rgba(0,0,0,0.6);
       ">
         ➤
         <div style="
@@ -149,9 +158,12 @@ function icon(angle, name="") {
 }
 
 /* =========================
-   BEARING
+   BEARING SAFE
 ========================= */
 function bearing(lat1, lon1, lat2, lon2) {
+
+  if([lat1,lon1,lat2,lon2].some(v => !Number.isFinite(v))) return 0;
+
   const toRad = d => d * Math.PI / 180;
   const toDeg = r => r * 180 / Math.PI;
 
@@ -166,9 +178,11 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   CAMERA FOLLOW
+   FOLLOW CAMERA
 ========================= */
 function followCar(lat, lon, heading) {
+
+  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
   const offset = 0.0012;
   const rad = heading * Math.PI / 180;
@@ -205,44 +219,53 @@ function showInfo(d){
 }
 
 /* =========================
-   API
+   API SAFE
 ========================= */
 async function setAlarm(id,v){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
+  try{
+    await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
+  }catch(e){console.log(e);}
 }
 
 async function watch(id){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
+  try{
+    await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
+  }catch(e){}
 }
 
 async function unwatch(id){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+  try{
+    await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+  }catch(e){}
 }
 
 /* =========================
-   UPDATE
+   UPDATE (CRASH SAFE CORE)
 ========================= */
 function update(d){
 
-  console.log("UPDATE:", d);
+  const lat = safeNum(d.lat);
+  const lon = safeNum(d.lon);
 
-  const {deviceId, lat, lon} = d;
+  if(lat === null || lon === null) return;
 
-  names[deviceId] = d.name;
+  const id = d.deviceId;
 
-  target[deviceId] = {lat, lon};
+  names[id] = d.name || "unknown";
 
-  if(!current[deviceId]){
-    current[deviceId] = {lat, lon};
+  target[id] = {lat, lon};
+
+  if(!current[id]){
+    current[id] = {lat, lon};
   }
 
-  if(!markers[deviceId]){
-    markers[deviceId] = L.marker([lat, lon], {
+  if(!markers[id]){
+    markers[id] = L.marker([lat, lon], {
       icon: icon(0, d.name)
     }).addTo(map);
 
-    markers[deviceId].on("click",()=>{
-      followedId = deviceId;
+    markers[id].on("click",()=>{
+      followedId = id;
       navigationMode = true;
       showInfo(d);
       map.setView([lat, lon], 17);
@@ -251,13 +274,13 @@ function update(d){
     render(d);
   }
 
-  if(followedId === deviceId){
+  if(followedId === id){
     showInfo(d);
   }
 }
 
 /* =========================
-   ENGINE
+   ENGINE (FULL SAFE)
 ========================= */
 function animate(){
 
@@ -270,6 +293,8 @@ function animate(){
 
     const nl = c.lat + (t.lat - c.lat) * 0.12;
     const no = c.lon + (t.lon - c.lon) * 0.12;
+
+    if(!Number.isFinite(nl) || !Number.isFinite(no)) return;
 
     let ang = headingState[id] || 0;
 
@@ -347,34 +372,48 @@ function render(d){
    LOAD
 ========================= */
 async function load(){
-  const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const data = await res.json();
+  try{
+    const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
+    const data = await res.json();
 
-  data.forEach(update);
-  render(data);
+    data.forEach(update);
+    render(data);
+  }catch(e){
+    console.log("LOAD ERROR", e);
+  }
 }
 
 load();
 
 /* =========================
-   WS (DEBUG SAFE)
+   WS SAFE
 ========================= */
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+let ws;
 
-ws.onopen = () => console.log("WS CONNECTED ✅");
+function connectWS(){
 
-ws.onmessage = (m)=>{
-  console.log("WS:", m.data);
-  const d = JSON.parse(m.data);
-  update(d);
-};
+  ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-ws.onerror = (e)=> console.log("WS ERROR ❌", e);
+  ws.onopen = ()=>console.log("WS CONNECTED ✅");
 
-ws.onclose = ()=>{
-  console.log("WS CLOSED ⚠️ reconnecting...");
-  setTimeout(()=>location.reload(), 2000);
-};
+  ws.onmessage = (m)=>{
+    try{
+      const d = JSON.parse(m.data);
+      update(d);
+    }catch(e){
+      console.log("WS PARSE ERROR", e);
+    }
+  };
+
+  ws.onerror = (e)=>console.log("WS ERROR", e);
+
+  ws.onclose = ()=>{
+    console.log("WS CLOSED → reconnect");
+    setTimeout(connectWS, 2000);
+  };
+}
+
+connectWS();
 
 </script>
 
