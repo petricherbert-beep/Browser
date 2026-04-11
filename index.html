@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS ULTRA PRO SAFE</title>
+<title>GPS ULTRA PRO - GOOGLE CAMERA</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -63,7 +63,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 ULTRA PRO (CRASH SAFE)</b>
+  <b>🚗 GPS PRO - GOOGLE CAMERA</b>
 
   <div style="margin-top:8px;">
     <button onclick="navigationMode = !navigationMode">
@@ -84,36 +84,34 @@ button {
 
 <script>
 
-console.log("SCRIPT LOADED ✅");
+console.log("SCRIPT LOADED");
 
 /* =========================
    MAP
 ========================= */
-const map = L.map("map").setView([47.09, 15.42], 13);
+const map = L.map("map", {
+  zoomControl: true
+}).setView([47.09, 15.42], 15);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap"
 }).addTo(map);
 
 /* =========================
-   STATE (SAFE INIT)
+   STATE
 ========================= */
 const markers = {};
-const current = {};
-const target = {};
-const last = {};
 const headingState = {};
-const names = {};
 
 let followedId = null;
 let navigationMode = false;
 
 /* =========================
-   SAFE NUMBER HELPER
+   SAFE NUMBER
 ========================= */
-function safeNum(v){
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+function n(v){
+  const x = Number(v);
+  return Number.isFinite(x) ? x : null;
 }
 
 /* =========================
@@ -121,147 +119,110 @@ function safeNum(v){
 ========================= */
 function icon(angle, name="") {
 
-  const n = (name || "").toLowerCase();
-
-  let color = "#2ecc71";
-  if (n.includes("nicole")) color = "#ff3b30";
-  if (n.includes("oliver")) color = "#0a84ff";
+  const color =
+    name.toLowerCase().includes("nicole") ? "#ff3b30" :
+    name.toLowerCase().includes("oliver") ? "#0a84ff" :
+    "#2ecc71";
 
   const initial = name ? name[0].toUpperCase() : "?";
 
   return L.divIcon({
-    className: "",
-    html: `
-      <div style="
-        transform: rotate(${angle}deg);
-        font-size: 42px;
-        color: ${color};
-        position: relative;
-      ">
+    className:"",
+    html:`
+      <div style="transform:rotate(${angle}deg);font-size:42px;color:${color};">
         ➤
-        <div style="
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%,-50%) rotate(-${angle}deg);
-          color: white;
-          font-size: 14px;
-          font-weight: 800;
-        ">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-${angle}deg);color:white;font-size:14px;font-weight:800;">
           ${initial}
         </div>
       </div>
     `,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22]
+    iconSize:[44,44],
+    iconAnchor:[22,22]
   });
 }
 
 /* =========================
-   BEARING SAFE
+   BEARING
 ========================= */
-function bearing(lat1, lon1, lat2, lon2) {
+function bearing(a,b,c,d){
 
-  if([lat1,lon1,lat2,lon2].some(v => !Number.isFinite(v))) return 0;
+  const toRad = x => x*Math.PI/180;
+  const toDeg = x => x*180/Math.PI;
 
-  const toRad = d => d * Math.PI / 180;
-  const toDeg = r => r * 180 / Math.PI;
+  const dLon = toRad(d-b);
 
-  const dLon = toRad(lon2 - lon1);
-
-  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const y = Math.sin(dLon)*Math.cos(toRad(c));
   const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    Math.cos(toRad(a))*Math.sin(toRad(c)) -
+    Math.sin(toRad(a))*Math.cos(toRad(c))*Math.cos(dLon);
 
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
 /* =========================
-   FOLLOW CAMERA
+   GOOGLE STYLE CAMERA
 ========================= */
-function followCar(lat, lon, heading) {
+function followGoogle(lat, lon, heading){
 
-  if(!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  if(!n(lat) || !n(lon)) return;
 
-  const offset = 0.0012;
+  const zoom = map.getZoom();
+
+  /* Distance ahead of car (like navigation preview) */
+  const forwardOffset = 0.0022;
+
   const rad = heading * Math.PI / 180;
 
-  const camLat = lat - Math.cos(rad) * offset;
-  const camLon = lon - Math.sin(rad) * offset;
+  const aheadLat = lat + Math.cos(rad) * forwardOffset;
+  const aheadLon = lon + Math.sin(rad) * forwardOffset;
 
-  map.setView([camLat, camLon], map.getZoom(), {
-    animate: true,
-    duration: 0.25
-  });
+  map.flyTo(
+    [aheadLat, aheadLon],
+    zoom,
+    {
+      animate: true,
+      duration: 0.6
+    }
+  );
 }
 
 /* =========================
-   INFO PANEL
+   INFO
 ========================= */
 function showInfo(d){
   document.getElementById("infoBox").innerHTML=`
     <b>${d.name}</b><br><br>
-
     🚗 ${d.speed} km/h<br>
     🔋 ${d.battery}%<br>
     🎯 ${d.accuracy} m<br>
     📡 ${d.status}<br>
-
-    <hr>
-
-    <button onclick="setAlarm('${d.deviceId}', true)">🚨 Alarm ON</button>
-    <button onclick="setAlarm('${d.deviceId}', false)">🔕 Alarm OFF</button>
-
-    <button onclick="watch('${d.deviceId}')">👁 Watch ON</button>
-    <button onclick="unwatch('${d.deviceId}')">🚫 Watch OFF</button>
   `;
 }
 
 /* =========================
-   API SAFE
-========================= */
-async function setAlarm(id,v){
-  try{
-    await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
-  }catch(e){console.log(e);}
-}
-
-async function watch(id){
-  try{
-    await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
-  }catch(e){}
-}
-
-async function unwatch(id){
-  try{
-    await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
-  }catch(e){}
-}
-
-/* =========================
-   UPDATE (CRASH SAFE CORE)
+   UPDATE
 ========================= */
 function update(d){
 
-  const lat = safeNum(d.lat);
-  const lon = safeNum(d.lon);
+  const lat = n(d.lat);
+  const lon = n(d.lon);
 
   if(lat === null || lon === null) return;
 
   const id = d.deviceId;
 
-  names[id] = d.name || "unknown";
+  const prev = markers[id]?.getLatLng();
 
-  target[id] = {lat, lon};
+  let ang = headingState[id] || 0;
 
-  if(!current[id]){
-    current[id] = {lat, lon};
+  if(prev){
+    ang = bearing(prev.lat, prev.lng, lat, lon);
+    headingState[id] = ang;
   }
 
   if(!markers[id]){
     markers[id] = L.marker([lat, lon], {
-      icon: icon(0, d.name)
+      icon: icon(ang, d.name)
     }).addTo(map);
 
     markers[id].on("click",()=>{
@@ -272,75 +233,20 @@ function update(d){
     });
 
     render(d);
+  } else {
+    markers[id].setLatLng([lat, lon]);
+    markers[id].setIcon(icon(ang, d.name));
+  }
+
+  /* GOOGLE CAMERA FOLLOW */
+  if(navigationMode && id === followedId){
+    followGoogle(lat, lon, ang);
   }
 
   if(followedId === id){
     showInfo(d);
   }
 }
-
-/* =========================
-   ENGINE (FULL SAFE)
-========================= */
-function animate(){
-
-  Object.keys(target).forEach(id=>{
-
-    const c = current[id];
-    const t = target[id];
-
-    if(!c || !t) return;
-
-    const nl = c.lat + (t.lat - c.lat) * 0.12;
-    const no = c.lon + (t.lon - c.lon) * 0.12;
-
-    if(!Number.isFinite(nl) || !Number.isFinite(no)) return;
-
-    let ang = headingState[id] || 0;
-
-    const prev = last[id];
-
-    if(prev){
-
-      const dist =
-        Math.abs(nl - prev.lat) +
-        Math.abs(no - prev.lon);
-
-      if(dist > 0.00001){
-
-        let raw = bearing(prev.lat, prev.lon, nl, no);
-
-        let diff = raw - ang;
-
-        if(diff > 180) diff -= 360;
-        if(diff < -180) diff += 360;
-
-        ang += diff * 0.2;
-
-        headingState[id] = ang;
-      }
-    }
-
-    last[id] = {lat: nl, lon: no};
-
-    c.lat = nl;
-    c.lon = no;
-
-    if(markers[id]){
-      markers[id].setLatLng([nl, no]);
-      markers[id].setIcon(icon(ang, names[id] || ""));
-    }
-
-    if(navigationMode && id === followedId){
-      followCar(nl, no, ang);
-    }
-
-  });
-
-  requestAnimationFrame(animate);
-}
-
-animate();
 
 /* =========================
    LIST
@@ -350,15 +256,15 @@ function render(d){
   const el = document.getElementById("list");
 
   const div = document.createElement("div");
-  div.className = "device";
+  div.className="device";
 
-  div.innerHTML = `
+  div.innerHTML=`
     <b>${d.name}</b><br>
     🚗 ${d.speed} km/h<br>
     🔋 ${d.battery}%
   `;
 
-  div.onclick = ()=>{
+  div.onclick=()=>{
     followedId = d.deviceId;
     navigationMode = true;
     showInfo(d);
@@ -372,48 +278,25 @@ function render(d){
    LOAD
 ========================= */
 async function load(){
-  try{
-    const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
-    const data = await res.json();
+  const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data = await res.json();
 
-    data.forEach(update);
-    render(data);
-  }catch(e){
-    console.log("LOAD ERROR", e);
-  }
+  data.forEach(update);
+  data.forEach(render);
 }
 
 load();
 
 /* =========================
-   WS SAFE
+   WS
 ========================= */
-let ws;
+const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-function connectWS(){
-
-  ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
-
-  ws.onopen = ()=>console.log("WS CONNECTED ✅");
-
-  ws.onmessage = (m)=>{
-    try{
-      const d = JSON.parse(m.data);
-      update(d);
-    }catch(e){
-      console.log("WS PARSE ERROR", e);
-    }
-  };
-
-  ws.onerror = (e)=>console.log("WS ERROR", e);
-
-  ws.onclose = ()=>{
-    console.log("WS CLOSED → reconnect");
-    setTimeout(connectWS, 2000);
-  };
-}
-
-connectWS();
+ws.onmessage = (m)=>{
+  try{
+    update(JSON.parse(m.data));
+  }catch(e){}
+};
 
 </script>
 
