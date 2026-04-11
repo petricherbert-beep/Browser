@@ -18,12 +18,16 @@ body {
   height: 100vh;
 }
 
-/* 🖤 Panel */
+/* Panel */
 #panel {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 9999;
+
+  width: 280px;
+  max-height: 80vh;
+  overflow: auto;
 
   background: rgba(20,20,20,0.75);
   backdrop-filter: blur(12px);
@@ -31,9 +35,6 @@ body {
 
   padding: 14px;
   border-radius: 14px;
-  width: 280px;
-  max-height: 80vh;
-  overflow: auto;
 
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
@@ -75,14 +76,14 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
    STATE
 ========================= */
 const markers = {};
+const currentPos = {};
+const targetPos = {};
 const lastPos = {};
-const lastAngle = {};
-const current = {};
-const target = {};
+const idToName = {};
 let followId = null;
 
 /* =========================
-   MATH
+   HELPERS
 ========================= */
 function lerp(a,b,t){ return a + (b-a)*t; }
 
@@ -100,44 +101,41 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   ICON (PFEIL + INITIAL + FARBE)
+   ICON (FIXED)
 ========================= */
 function createArrowIcon(angle, name="") {
-  const n = (name||"").toLowerCase();
+
+  const n = (name || "").toLowerCase();
 
   let color = "#2ecc71";
   if (n.includes("nicole")) color = "#ff3b30"; // rot
   if (n.includes("oliver")) color = "#0a84ff"; // blau
 
-  const initial = (name && name.length > 0)
-    ? name[0].toUpperCase()
-    : "?";
+  const initial = name ? name.charAt(0).toUpperCase() : "?";
 
   return L.divIcon({
     className: "",
     html: `
       <div style="
         transform: rotate(${angle}deg);
-        width: 44px;
-        height: 44px;
-
-        display:flex;
-        align-items:center;
-        justify-content:center;
-
-        background: ${color};
-        border: 2px solid rgba(0,0,0,0.6);
-        border-radius: 50% 50% 50% 0;
-        transform-origin: center;
-
-        box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+        font-size: 40px;
+        color:${color};
+        position: relative;
+        text-shadow: 0 0 6px rgba(0,0,0,0.6);
       ">
+        ➤
+
         <div style="
-          transform: rotate(-${angle}deg);
+          position:absolute;
+          top:50%;
+          left:50%;
+          transform: translate(-50%,-50%) rotate(-${angle}deg);
           color:white;
-          font-weight:700;
-          font-size:16px;
-        ">${initial}</div>
+          font-size:14px;
+          font-weight:800;
+        ">
+          ${initial}
+        </div>
       </div>
     `,
     iconSize: [44,44],
@@ -149,21 +147,23 @@ function createArrowIcon(angle, name="") {
    LIST
 ========================= */
 function renderList(devs){
-  const list = document.getElementById("list");
-  list.innerHTML = "";
+  const list=document.getElementById("list");
+  list.innerHTML="";
 
   devs.forEach(d=>{
-    const div = document.createElement("div");
-    div.className = "device";
+    idToName[d.deviceId]=d.name;
 
-    div.innerHTML = `
+    const div=document.createElement("div");
+    div.className="device";
+
+    div.innerHTML=`
       <b>${d.name}</b><br>
       <small class="${d.status}">● ${d.status}</small><br>
       🔋 ${d.battery}% | 🚗 ${d.speed} km/h
     `;
 
-    div.onclick = ()=>{
-      followId = d.deviceId;
+    div.onclick=()=>{
+      followId=d.deviceId;
       map.setView([d.lat,d.lon],17);
       markers[d.deviceId]?.openPopup();
     };
@@ -173,35 +173,34 @@ function renderList(devs){
 }
 
 /* =========================
-   UPDATE
+   UPDATE DEVICE
 ========================= */
 function update(d){
+
   const {deviceId,lat,lon,speed,battery,accuracy,name,status}=d;
 
-  target[deviceId]={lat,lon};
+  idToName[deviceId]=name;
 
-  if(!current[deviceId]){
-    current[deviceId]={lat,lon};
+  targetPos[deviceId]={lat,lon};
+
+  if(!currentPos[deviceId]){
+    currentPos[deviceId]={lat,lon};
   }
 
   if(!markers[deviceId]){
-    const m=L.marker([lat,lon],{
+    markers[deviceId]=L.marker([lat,lon],{
       icon:createArrowIcon(0,name)
     }).addTo(map);
 
-    m.bindPopup(`
+    markers[deviceId].bindPopup(`
       <div style="min-width:200px">
         <b style="font-size:16px;">📍 ${name}</b><br><br>
-        📌 Lat: ${lat.toFixed(5)}<br>
-        📌 Lon: ${lon.toFixed(5)}<br>
         🚗 Speed: ${speed} km/h<br>
         🔋 Battery: ${battery}%<br>
         🎯 Accuracy: ${accuracy} m<br>
         📡 Status: ${status}
       </div>
     `);
-
-    markers[deviceId]=m;
   }
 }
 
@@ -209,36 +208,35 @@ function update(d){
    ANIMATION LOOP
 ========================= */
 function animate(){
-  Object.keys(target).forEach(id=>{
 
-    const c=current[id];
-    const t=target[id];
+  Object.keys(targetPos).forEach(id=>{
+
+    const c=currentPos[id];
+    const t=targetPos[id];
 
     if(!c||!t) return;
 
-    const newLat=lerp(c.lat,t.lat,0.08);
-    const newLon=lerp(c.lon,t.lon,0.08);
+    const nl=lerp(c.lat,t.lat,0.08);
+    const no=lerp(c.lon,t.lon,0.08);
 
-    /* Richtung */
-    let ang=lastAngle[id]||0;
+    let ang=0;
+
     if(lastPos[id]){
-      ang=bearing(lastPos[id].lat,lastPos[id].lon,newLat,newLon);
+      ang=bearing(lastPos[id].lat,lastPos[id].lon,nl,no);
     }
 
-    lastAngle[id]=ang;
     lastPos[id]=t;
 
-    c.lat=newLat;
-    c.lon=newLon;
+    c.lat=nl;
+    c.lon=no;
 
     if(markers[id]){
-      markers[id].setLatLng([newLat,newLon]);
-      markers[id].setIcon(createArrowIcon(ang, id));
+      markers[id].setLatLng([nl,no]);
+      markers[id].setIcon(createArrowIcon(ang,idToName[id]||""));
     }
 
-    /* Follow */
     if(followId===id){
-      map.setView([newLat,newLon],map.getZoom(),{animate:false});
+      map.setView([nl,no],map.getZoom(),{animate:false});
     }
 
   });
