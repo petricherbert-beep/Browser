@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS STABLE TRACKING</title>
+<title>GPS VECTOR FIX</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -24,26 +24,24 @@ body {
   left: 12px;
   z-index: 9999;
 
-  width: 340px;
+  width: 320px;
   max-height: 85vh;
   overflow: auto;
 
   background: rgba(20,20,20,0.85);
-  backdrop-filter: blur(14px);
   color: white;
-
-  padding: 14px;
-  border-radius: 14px;
+  padding: 12px;
+  border-radius: 12px;
 }
 
 .device {
-  padding: 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
   cursor: pointer;
 }
 
 .device:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.08);
 }
 </style>
 </head>
@@ -51,54 +49,31 @@ body {
 <body>
 
 <div id="panel">
-  <b>🚗 STABLE GPS TRACKING</b>
+  <b>🚗 VECTOR TRACKER</b>
   <hr>
   <div id="list"></div>
-  <hr>
-  <div id="infoBox">👆 Select device</div>
 </div>
 
 <div id="map"></div>
 
 <script>
 
-/* =========================
-   MAP
-========================= */
-const map = L.map("map").setView([47.09, 15.42], 14);
+/* ================= MAP ================= */
+const map = L.map("map").setView([47.09, 15.42], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap"
 }).addTo(map);
 
-/* =========================
-   STATE
-========================= */
+/* ================= STATE ================= */
 const markers = {};
+const lastPos = {};
 const rendered = new Set();
 
-const smooth = {};
-const lastRaw = {};
-const heading = {};
+/* ================= SAFE ================= */
+const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
-/* =========================
-   SAFE NUMBER
-========================= */
-function n(v){
-  const x = Number(v);
-  return Number.isFinite(x) ? x : null;
-}
-
-/* =========================
-   LERP
-========================= */
-function lerp(a,b,t){
-  return a + (b - a) * t;
-}
-
-/* =========================
-   BEARING (RAW ONLY)
-========================= */
+/* ================= VECTOR HEADING ================= */
 function bearing(lat1, lon1, lat2, lon2){
 
   const toRad = x => x * Math.PI / 180;
@@ -114,9 +89,7 @@ function bearing(lat1, lon1, lat2, lon2){
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-/* =========================
-   ICON
-========================= */
+/* ================= ICON ================= */
 function icon(name, angle){
 
   const color =
@@ -124,17 +97,17 @@ function icon(name, angle){
     name?.toLowerCase().includes("oliver") ? "#0a84ff" :
     "#2ecc71";
 
-  const initial = name ? name[0].toUpperCase() : "?";
+  const letter = name?.[0]?.toUpperCase() || "?";
 
   return L.divIcon({
     className:"",
     html:`
       <div style="
-        position:relative;
         transform:rotate(${angle}deg);
         font-size:42px;
         color:${color};
-        text-shadow:-1px -1px 0 black,1px 1px 0 black;
+        text-shadow:0 0 4px black;
+        position:relative;
       ">
         ➤
         <div style="
@@ -143,10 +116,10 @@ function icon(name, angle){
           left:50%;
           transform:translate(-50%,-50%) rotate(-${angle}deg);
           color:white;
-          font-size:14px;
-          font-weight:800;
+          font-size:13px;
+          font-weight:bold;
         ">
-          ${initial}
+          ${letter}
         </div>
       </div>
     `,
@@ -155,9 +128,7 @@ function icon(name, angle){
   });
 }
 
-/* =========================
-   UPDATE (FIXED LOGIC)
-========================= */
+/* ================= UPDATE ================= */
 function update(d){
 
   const id = d.deviceId;
@@ -167,72 +138,29 @@ function update(d){
 
   if(lat === null || lon === null) return;
 
-  const raw = {lat, lon};
+  const prev = lastPos[id];
 
-  const prev = lastRaw[id];
+  let angle = 0;
 
-  // 🔥 ONLY RAW → HEADING
   if(prev){
-    const dist =
-      Math.abs(prev.lat - lat) +
-      Math.abs(prev.lon - lon);
-
-    // noise filter
-    if(dist > 0.000005){
-      heading[id] = bearing(prev.lat, prev.lon, lat, lon);
-    }
+    angle = bearing(prev.lat, prev.lon, lat, lon);
   }
 
-  lastRaw[id] = raw;
+  lastPos[id] = {lat, lon};
 
-  if(!smooth[id]){
-    smooth[id] = {lat, lon};
-  }
-
-  smooth[id].target = raw;
-
-  // marker init
   if(!markers[id]){
     markers[id] = L.marker([lat, lon], {
-      icon: icon(d.name, heading[id] || 0)
+      icon: icon(d.name, angle)
     }).addTo(map);
+  } else {
+    markers[id].setLatLng([lat, lon]);
+    markers[id].setIcon(icon(d.name, angle));
   }
 
   renderList(d);
 }
 
-/* =========================
-   ANIMATION LOOP
-========================= */
-function animate(){
-
-  Object.keys(smooth).forEach(id => {
-
-    const s = smooth[id];
-    if(!s.target) return;
-
-    // smooth movement
-    s.lat = lerp(s.lat, s.target.lat, 0.15);
-    s.lon = lerp(s.lon, s.target.lon, 0.15);
-
-    if(markers[id]){
-      markers[id].setLatLng([s.lat, s.lon]);
-
-      markers[id].setIcon(
-        icon(lastRaw[id]?.name || "", heading[id] || 0)
-      );
-    }
-
-  });
-
-  requestAnimationFrame(animate);
-}
-
-animate();
-
-/* =========================
-   LIST (NO DUPLICATES)
-========================= */
+/* ================= LIST ================= */
 function renderList(d){
 
   if(rendered.has(d.deviceId)) return;
@@ -241,42 +169,32 @@ function renderList(d){
   const el = document.getElementById("list");
 
   const div = document.createElement("div");
-  div.className="device";
+  div.className = "device";
 
-  div.innerHTML=`
-    <b>${d.name}</b><br>
-    🚗 ${d.speed} km/h<br>
-    🔋 ${d.battery}%
-  `;
+  div.innerHTML = `<b>${d.name}</b>`;
 
-  div.onclick=()=>{
+  div.onclick = () => {
     map.setView([d.lat, d.lon], 17);
   };
 
   el.appendChild(div);
 }
 
-/* =========================
-   LOAD
-========================= */
+/* ================= LOAD ================= */
 async function load(){
   const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data = await res.json();
-
   data.forEach(update);
 }
-
 load();
 
-/* =========================
-   WS
-========================= */
+/* ================= WS ================= */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
 ws.onmessage = (m)=>{
-  try{
+  try {
     update(JSON.parse(m.data));
-  }catch(e){}
+  } catch(e){}
 };
 
 </script>
