@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS CLEAN PRO</title>
+<title>GPS CLEAN HEADING FIX</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -51,7 +51,7 @@ body {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS CLEAN PRO</b>
+  <b>🚗 GPS HEADING FIX</b>
   <hr>
   <div id="list"></div>
   <hr>
@@ -62,11 +62,6 @@ body {
 
 <script>
 
-console.log("INIT OK");
-
-/* =========================
-   MAP
-========================= */
 const map = L.map("map").setView([47.09, 15.42], 14);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -77,10 +72,10 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
    STATE
 ========================= */
 const markers = {};
-const devices = {};
 const rendered = new Set();
 
-let followedId = null;
+const lastGPS = {};
+const heading = {};
 
 /* =========================
    SAFE NUMBER
@@ -91,13 +86,31 @@ function n(v){
 }
 
 /* =========================
+   BEARING (CORRECT)
+========================= */
+function bearing(lat1, lon1, lat2, lon2){
+
+  const toRad = x => x * Math.PI / 180;
+  const toDeg = x => x * 180 / Math.PI;
+
+  const dLon = toRad(lon2 - lon1);
+
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/* =========================
    ICON
 ========================= */
-function icon(name="", angle=0){
+function icon(name, angle){
 
   const color =
-    name.toLowerCase().includes("nicole") ? "#ff3b30" :
-    name.toLowerCase().includes("oliver") ? "#0a84ff" :
+    name?.toLowerCase().includes("nicole") ? "#ff3b30" :
+    name?.toLowerCase().includes("oliver") ? "#0a84ff" :
     "#2ecc71";
 
   const initial = name ? name[0].toUpperCase() : "?";
@@ -106,8 +119,9 @@ function icon(name="", angle=0){
     className:"",
     html:`
       <div style="
+        position:relative;
         transform:rotate(${angle}deg);
-        font-size:40px;
+        font-size:42px;
         color:${color};
         text-shadow:-1px -1px 0 black,1px 1px 0 black;
       ">
@@ -118,55 +132,64 @@ function icon(name="", angle=0){
           left:50%;
           transform:translate(-50%,-50%) rotate(-${angle}deg);
           color:white;
-          font-size:13px;
+          font-size:14px;
           font-weight:800;
         ">
           ${initial}
         </div>
       </div>
     `,
-    iconSize:[40,40],
-    iconAnchor:[20,20]
+    iconSize:[42,42],
+    iconAnchor:[21,21]
   });
 }
 
 /* =========================
-   UPDATE DEVICE
+   UPDATE
 ========================= */
 function update(d){
+
+  const id = d.deviceId;
 
   const lat = n(d.lat);
   const lon = n(d.lon);
 
   if(lat === null || lon === null) return;
 
-  const id = d.deviceId;
+  /* heading based on RAW GPS */
+  const prev = lastGPS[id];
 
-  devices[id] = d;
+  let ang = heading[id] || 0;
 
-  /* MARKER */
+  if(prev){
+    ang = bearing(prev.lat, prev.lon, lat, lon);
+    heading[id] = ang;
+  }
+
+  lastGPS[id] = {lat, lon};
+
+  /* marker */
   if(!markers[id]){
     markers[id] = L.marker([lat, lon], {
-      icon: icon(d.name)
+      icon: icon(d.name, ang)
     }).addTo(map);
 
     markers[id].on("click",()=>{
-      followedId = id;
       map.setView([lat, lon], 17);
       showInfo(d);
     });
   } else {
     markers[id].setLatLng([lat, lon]);
+    markers[id].setIcon(icon(d.name, ang));
   }
 
-  /* LIST (ONLY ONCE) */
-  render(d);
+  renderListOnce(d);
 }
 
 /* =========================
    LIST (NO DUPLICATES)
 ========================= */
-function render(d){
+function renderListOnce(d){
 
   if(rendered.has(d.deviceId)) return;
   rendered.add(d.deviceId);
@@ -174,7 +197,7 @@ function render(d){
   const el = document.getElementById("list");
 
   const div = document.createElement("div");
-  div.className = "device";
+  div.className="device";
 
   div.innerHTML = `
     <b>${d.name}</b><br>
@@ -183,7 +206,6 @@ function render(d){
   `;
 
   div.onclick = ()=>{
-    followedId = d.deviceId;
     map.setView([d.lat, d.lon], 17);
     showInfo(d);
   };
@@ -216,14 +238,13 @@ async function load(){
 load();
 
 /* =========================
-   WS (LIVE ONLY)
+   WS
 ========================= */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
 ws.onmessage = (m)=>{
   try{
-    const d = JSON.parse(m.data);
-    update(d);
+    update(JSON.parse(m.data));
   } catch(e){
     console.log("WS ERROR");
   }
