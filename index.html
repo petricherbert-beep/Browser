@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS PRO TRACKER FIXED</title>
+<title>GPS ULTRA PRO</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -25,7 +25,7 @@ body {
   left: 12px;
   z-index: 9999;
 
-  width: 320px;
+  width: 330px;
   max-height: 85vh;
   overflow: auto;
 
@@ -69,7 +69,7 @@ button:hover {
 <body>
 
 <div id="panel">
-  <b>🚗 PRO TRACKER FIX</b>
+  <b>🚗 ULTRA PRO TRACKER</b>
 
   <div style="margin-top:8px;">
     <button onclick="toggleCompass()">🧭 Compass Mode</button>
@@ -105,6 +105,7 @@ const markers = {};
 const current = {};
 const target = {};
 const last = {};
+const headingState = {};
 const names = {};
 
 let followedId = null;
@@ -112,10 +113,8 @@ let navigationMode = false;
 let compassMode = false;
 
 /* =========================
-   MATH
+   BEARING
 ========================= */
-function lerp(a,b,t){ return a + (b-a)*t; }
-
 function bearing(lat1, lon1, lat2, lon2) {
   const toRad = d => d*Math.PI/180;
   const toDeg = r => r*180/Math.PI;
@@ -130,7 +129,24 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   ICON FIXED
+   CAR CAMERA (FIXED)
+========================= */
+function followCar(lat, lon, heading) {
+
+  const offset = 0.0012;
+  const rad = heading * Math.PI / 180;
+
+  const camLat = lat - Math.cos(rad) * offset;
+  const camLon = lon - Math.sin(rad) * offset;
+
+  map.setView([camLat, camLon], map.getZoom(), {
+    animate: true,
+    duration: 0.25
+  });
+}
+
+/* =========================
+   ICON
 ========================= */
 function icon(angle,name="") {
 
@@ -172,10 +188,9 @@ function icon(angle,name="") {
 }
 
 /* =========================
-   INFO PANEL (WITH CONTROLS)
+   INFO PANEL
 ========================= */
 function showInfo(d){
-
   document.getElementById("infoBox").innerHTML=`
     <b>${d.name}</b><br><br>
 
@@ -184,7 +199,7 @@ function showInfo(d){
     🎯 ${d.accuracy} m<br>
     📡 ${d.status}<br>
 
-    <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:8px 0;">
+    <hr>
 
     <button onclick="setAlarm('${d.deviceId}', true)">🚨 Alarm ON</button>
     <button onclick="setAlarm('${d.deviceId}', false)">🔕 Alarm OFF</button>
@@ -195,24 +210,18 @@ function showInfo(d){
 }
 
 /* =========================
-   CONTROL API
+   API
 ========================= */
 async function setAlarm(id,v){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{
-    method:"POST"
-  });
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${v}`,{method:"POST"});
 }
 
 async function watch(id){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{
-    method:"POST"
-  });
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch?watcherId=web`,{method:"POST"});
 }
 
 async function unwatch(id){
-  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{
-    method:"POST"
-  });
+  await fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
 }
 
 /* =========================
@@ -251,9 +260,9 @@ function render(list){
 ========================= */
 function update(d){
 
-  const {deviceId,lat,lon,speed,battery,accuracy,name,status}=d;
+  const {deviceId,lat,lon}=d;
 
-  names[deviceId]=name;
+  names[deviceId]=d.name;
 
   target[deviceId]={lat,lon};
 
@@ -263,7 +272,7 @@ function update(d){
 
   if(!markers[deviceId]){
     markers[deviceId]=L.marker([lat,lon],{
-      icon:icon(0,name)
+      icon:icon(0,d.name)
     }).addTo(map);
 
     markers[deviceId].on("click",()=>{
@@ -279,10 +288,8 @@ function update(d){
 }
 
 /* =========================
-   ANIMATION ENGINE (FIXED BEARING)
+   ENGINE (FIXED + STABLE)
 ========================= */
-let rotation=0;
-
 function animate(){
 
   Object.keys(target).forEach(id=>{
@@ -292,14 +299,27 @@ function animate(){
 
     if(!c||!t) return;
 
-    const nl=lerp(c.lat,t.lat,0.08);
-    const no=lerp(c.lon,t.lon,0.08);
+    // smoothing position
+    const nl=c.lat + (t.lat - c.lat)*0.12;
+    const no=c.lon + (t.lon - c.lon)*0.12;
 
     let ang=0;
 
     const prev=last[id];
+
     if(prev){
-      ang=bearing(prev.lat,prev.lon,nl,no);
+      let raw=bearing(prev.lat,prev.lon,nl,no);
+
+      if(!headingState[id]) headingState[id]=raw;
+
+      let diff=raw-headingState[id];
+
+      if(diff>180) diff-=360;
+      if(diff<-180) diff+=360;
+
+      headingState[id]+=diff*0.18;
+
+      ang=headingState[id];
     }
 
     last[id]={lat:nl,lon:no};
@@ -312,16 +332,9 @@ function animate(){
       markers[id].setIcon(icon(ang,names[id]||""));
     }
 
-    /* NAVIGATION MODE */
+    // NAVIGATION MODE
     if(navigationMode && id===followedId){
-      map.setView([nl,no],map.getZoom(),{animate:false});
-    }
-
-    /* COMPASS MODE */
-    if(compassMode && id===followedId){
-      rotation=-ang;
-      document.querySelector(".leaflet-map-pane").style.transform=
-        `rotate(${rotation}deg)`;
+      followCar(nl,no,ang);
     }
 
   });
