@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Tracker</title>
+<title>CarPlay GPS Tracker</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -10,46 +10,53 @@
 <style>
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  font-family: system-ui;
+  background: #0b0f14;
 }
 
 #map {
   height: 100vh;
 }
 
-/* 📋 Panel */
+/* 🖤 CarPlay Panel */
 #panel {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 12px;
+  left: 12px;
   z-index: 9999;
-  background: white;
-  padding: 12px;
-  border-radius: 12px;
-  width: 260px;
+
+  width: 280px;
   max-height: 80vh;
   overflow: auto;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+
+  background: rgba(20,20,20,0.75);
+  backdrop-filter: blur(12px);
+  color: white;
+
+  padding: 14px;
+  border-radius: 14px;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
 .device {
-  padding: 8px;
-  border-bottom: 1px solid #eee;
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   cursor: pointer;
 }
 
 .device:hover {
-  background: #f5f5f5;
+  background: rgba(255,255,255,0.06);
 }
 
 .online { color: #2ecc71; }
 .idle { color: #f1c40f; }
 .offline { color: #e74c3c; }
 
-/* ➤ Marker */
-.arrow-icon div {
-  transition: transform 0.3s linear;
-  text-shadow: 0 0 6px rgba(0,0,0,0.4);
+/* 🚗 Marker */
+.car-icon div {
+  font-size: 42px;
+  text-shadow: 0 0 10px rgba(0,0,0,0.8);
 }
 </style>
 </head>
@@ -57,7 +64,7 @@ body {
 <body>
 
 <div id="panel">
-  <b>📡 Devices</b>
+  <b>🚗 CarPlay Tracker</b>
   <div id="list"></div>
 </div>
 
@@ -71,12 +78,22 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap"
 }).addTo(map);
 
+/* =========================
+   STATE
+========================= */
 const markers = {};
-const lastPositions = {};
-const lastAngles = {};
+const currentPos = {};
+const targetPos = {};
 let followedDevice = null;
+let navigationMode = false;
 
-/* 🧭 Richtung */
+/* =========================
+   SMOOTH HELPERS
+========================= */
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
 function getBearing(lat1, lon1, lat2, lon2) {
   const toRad = d => d * Math.PI / 180;
   const toDeg = r => r * 180 / Math.PI;
@@ -90,30 +107,27 @@ function getBearing(lat1, lon1, lat2, lon2) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-/* ➤ ICON (GRÖSSER + FARBE) */
-function createArrowIcon(angle, name="") {
-  let color = "#2ecc71"; // default grün
+/* =========================
+   CAR ICON
+========================= */
+function createCarIcon(name="") {
+  const n = (name || "").toLowerCase();
 
-  if (name.toLowerCase().includes("nicole")) color = "#e74c3c"; // rot
-  if (name.toLowerCase().includes("oliver")) color = "#3498db"; // blau
+  let color = "#2ecc71"; // green
+  if (n.includes("nicole")) color = "#ff3b30"; // red
+  if (n.includes("oliver")) color = "#0a84ff"; // blue
 
   return L.divIcon({
     className: "",
-    html: `
-      <div style="
-        transform: rotate(${angle}deg);
-        font-size: 40px;
-        font-weight: bold;
-        color:${color};
-        text-shadow: 0 0 6px rgba(0,0,0,0.4);
-      ">➤</div>
-    `,
-    iconSize: [50,50],
-    iconAnchor: [25,25]
+    html: `<div style="color:${color}; font-size:42px;">🚗</div>`,
+    iconSize: [40,40],
+    iconAnchor: [20,20]
   });
 }
 
-/* 📋 Liste */
+/* =========================
+   LIST UI
+========================= */
 function renderList(devices) {
   const list = document.getElementById("list");
   list.innerHTML = "";
@@ -123,48 +137,48 @@ function renderList(devices) {
     div.className = "device";
 
     div.innerHTML = `
-      <b>${d.name || d.deviceId}</b><br>
+      <b style="font-size:15px;">${d.name || d.deviceId}</b><br>
       <small class="${d.status}">● ${d.status}</small><br>
       🔋 ${d.battery}% | 🚗 ${d.speed} km/h
     `;
 
     div.onclick = () => {
-      map.setView([d.lat, d.lon], 17);
-      markers[d.deviceId]?.openPopup();
-      followedDevice = d.deviceId;
+      followDevice(d.deviceId);
+      map.setView([d.lat, d.lon], 17, { animate: true });
     };
 
     list.appendChild(div);
   });
 }
 
-/* 📍 UPDATE */
+/* =========================
+   FOLLOW
+========================= */
+function followDevice(id) {
+  followedDevice = id;
+  navigationMode = true;
+}
+
+/* =========================
+   UPDATE DEVICE
+========================= */
 function updateDevice(d) {
   const { deviceId, lat, lon, speed, battery, accuracy, name, status } = d;
 
-  let angle = lastAngles[deviceId] || 0;
+  targetPos[deviceId] = { lat, lon };
 
-  if (lastPositions[deviceId]) {
-    const prev = lastPositions[deviceId];
-    const newAngle = getBearing(prev.lat, prev.lon, lat, lon);
-
-    if (speed > 1) {
-      angle = angle + (newAngle - angle) * 0.3;
-      lastAngles[deviceId] = angle;
-    }
+  if (!currentPos[deviceId]) {
+    currentPos[deviceId] = { lat, lon };
   }
-
-  lastPositions[deviceId] = { lat, lon };
 
   if (!markers[deviceId]) {
     const marker = L.marker([lat, lon], {
-      icon: createArrowIcon(angle, name)
+      icon: createCarIcon(name)
     }).addTo(map);
 
     marker.bindPopup(`
       <div style="min-width:180px">
-        <b>📱 ${name || deviceId}</b><br><br>
-
+        <b style="font-size:16px;">🚗 ${name || deviceId}</b><br><br>
         📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}<br>
         🚗 Speed: ${speed} km/h<br>
         🔋 Battery: ${battery}%<br>
@@ -174,17 +188,41 @@ function updateDevice(d) {
     `);
 
     markers[deviceId] = marker;
-  } else {
-    markers[deviceId].setLatLng([lat, lon]);
-    markers[deviceId].setIcon(createArrowIcon(angle, name));
-  }
-
-  if (followedDevice === deviceId) {
-    map.setView([lat, lon], 17, { animate: true });
   }
 }
 
-/* 📡 INIT LOAD */
+/* =========================
+   ANIMATION LOOP (SMOOTH)
+========================= */
+function animate() {
+  Object.keys(targetPos).forEach(id => {
+    if (!currentPos[id]) return;
+
+    const c = currentPos[id];
+    const t = targetPos[id];
+
+    c.lat = lerp(c.lat, t.lat, 0.08);
+    c.lon = lerp(c.lon, t.lon, 0.08);
+
+    if (markers[id]) {
+      markers[id].setLatLng([c.lat, c.lon]);
+    }
+
+    if (followedDevice === id && navigationMode) {
+      map.setView([c.lat, c.lon], map.getZoom(), {
+        animate: false
+      });
+    }
+  });
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+/* =========================
+   LOAD INITIAL DATA
+========================= */
 async function loadDevices() {
   const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
   const devices = await res.json();
@@ -195,7 +233,9 @@ async function loadDevices() {
 
 loadDevices();
 
-/* 🌐 WEBSOCKET */
+/* =========================
+   WEBSOCKET
+========================= */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
 ws.onmessage = (msg) => {
