@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS PRO TRACKING - NEXT LEVEL</title>
+<title>GPS PRO DISPATCH MAP</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,7 +21,7 @@ body {
   top: 12px;
   left: 12px;
   z-index: 9999;
-  width: 320px;
+  width: 340px;
   max-height: 85vh;
   overflow: auto;
   background: rgba(20,20,20,0.85);
@@ -50,12 +50,11 @@ button {
 .stop { background:#34c759; color:white; }
 .follow { background:#0a84ff; color:white; }
 
-/* ================= ALARM ANIMATION ================= */
-@keyframes alarmPulse {
-  0% { transform: scale(1); opacity: 0.9; }
-  100% { transform: scale(2.6); opacity: 0; }
+/* ALARM */
+@keyframes pulse {
+  0% { transform:scale(1); opacity:0.9; }
+  100% { transform:scale(2.6); opacity:0; }
 }
-
 .alarm-ring {
   position:absolute;
   width:70px;
@@ -63,11 +62,11 @@ button {
   border:3px solid red;
   border-radius:50%;
   transform:translate(-50%,-50%);
-  animation: alarmPulse 1s infinite;
+  animation:pulse 1s infinite;
   box-shadow:0 0 20px red;
 }
 
-/* shake effect */
+/* SHAKE */
 @keyframes shake {
   0% { transform: translate(0,0); }
   25% { transform: translate(2px,1px); }
@@ -75,14 +74,10 @@ button {
   75% { transform: translate(2px,-2px); }
   100% { transform: translate(0,0); }
 }
+.shake { animation: shake 0.2s infinite; }
 
-.shake {
-  animation: shake 0.2s infinite;
-}
-
-/* moving blur trail effect */
 .leaflet-interactive {
-  filter: drop-shadow(0 0 6px rgba(10,132,255,0.5));
+  filter: drop-shadow(0 0 6px rgba(10,132,255,0.4));
 }
 </style>
 </head>
@@ -90,7 +85,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS PRO TRACKING</b>
+  <b>🚗 GPS DISPATCH PRO</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -99,6 +94,7 @@ button {
 
 <script>
 
+/* ================= MAP ================= */
 const map = L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -109,11 +105,12 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const markers = {};
 const trails = {};
 const last = {};
+const angles = {};
 const alarmState = {};
-
-let followId = null;
-let autoFollow = false;
 const list = [];
+
+let followTargets = new Set();
+let followMode = false;
 
 /* ================= AUDIO ================= */
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
@@ -152,7 +149,17 @@ function speak(t){
   speechSynthesis.speak(m);
 }
 
-/* ================= ICON (ACCURACY RING + LETTER + ALARM) ================= */
+function formatTime(ts){
+  if(!ts) return "?";
+  const diff = Date.now() - ts;
+  const sec = Math.floor(diff/1000);
+  if(sec < 60) return sec+"s ago";
+  const min = Math.floor(sec/60);
+  if(min < 60) return min+"m ago";
+  return Math.floor(min/60)+"h ago";
+}
+
+/* ================= ICON ================= */
 function icon(name, angle, alarm, accuracy){
 
   const n = (name || "").toLowerCase();
@@ -167,14 +174,13 @@ function icon(name, angle, alarm, accuracy){
   else if(n.includes("nicole")) letter = "N";
   else letter = (name?.[0] || "?").toUpperCase();
 
-  const acc = accuracy ? Math.max(10, Math.min(accuracy, 100)) : 50;
+  const acc = accuracy ? Math.max(20, Math.min(accuracy, 120)) : 60;
 
   return L.divIcon({
     className:"",
     html:`
       <div style="position:relative;width:70px;height:70px;">
 
-        <!-- ALARM RING -->
         ${alarm ? '<div class="alarm-ring"></div>' : ''}
 
         <!-- ACCURACY RING -->
@@ -197,10 +203,7 @@ function icon(name, angle, alarm, accuracy){
           transform:translate(-50%,-50%) rotate(${angle}deg);
           font-size:40px;
           color:${color};
-          text-shadow:0 0 6px rgba(0,0,0,0.6);
-        ">
-          ➤
-        </div>
+        ">➤</div>
 
         <!-- LETTER -->
         <div style="
@@ -238,7 +241,7 @@ function update(d){
   const lat=n(d.lat);
   const lon=n(d.lon);
 
-  if(lat===null || lon===null) return;
+  if(lat===null||lon===null) return;
 
   const prev=last[id];
 
@@ -247,64 +250,62 @@ function update(d){
     if(dist<3) return;
   }
 
-  let angle=0;
-  if(prev) angle=bearing(prev.lat,prev.lon,lat,lon);
+  let newAngle = 0;
+  if(prev) newAngle=bearing(prev.lat,prev.lon,lat,lon);
+
+  const smoothed = (angles[id] ?? newAngle) + (newAngle - (angles[id] ?? newAngle)) * 0.25;
+  angles[id]=smoothed;
 
   last[id]={lat,lon};
 
   if(!trails[id]) trails[id]=[];
   trails[id].push([lat,lon]);
-  if(trails[id].length>60) trails[id].shift();
+  if(trails[id].length>80) trails[id].shift();
 
   if(!markers[id]){
     markers[id]=L.marker([lat,lon],{
-      icon:icon(d.name,angle,d.alarmActive,d.accuracy)
+      icon:icon(d.name,smoothed,d.alarmActive,d.accuracy)
     }).addTo(map);
 
     markers[id].trail=L.polyline([],{
       color:"#0a84ff",
       weight:3,
-      opacity:0.8
+      opacity:0.7
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name,angle,d.alarmActive,d.accuracy));
+  markers[id].setIcon(icon(d.name,smoothed,d.alarmActive,d.accuracy));
   markers[id].trail.setLatLngs(trails[id]);
 
   const ex=list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
 
-  /* ALARM SYSTEM */
+  /* ALARM */
   if(d.alarmActive && !alarmState[id]){
     alarmState[id]=true;
-
     if(audioReady) alarmAudio.play();
     speak("Alarm bei "+d.name);
-
     map.flyTo([lat,lon],18);
-
-    // shake effect on panel
     document.getElementById("panel").classList.add("shake");
-    setTimeout(()=>{
-      document.getElementById("panel").classList.remove("shake");
-    },1500);
+    setTimeout(()=>document.getElementById("panel").classList.remove("shake"),1200);
   }
 
   if(!d.alarmActive && alarmState[id]){
     alarmState[id]=false;
     alarmAudio.pause();
-    speak("Alarm beendet bei "+d.name);
   }
 
   /* FOLLOW */
-  if(followId===id){
+  if(followTargets.has(id)){
     map.panTo([lat,lon]);
   }
 
-  if(autoFollow && followId===id && d.speed>1){
-    map.panTo([lat,lon]);
+  if(followMode){
+    const pts=[...followTargets].map(id=>markers[id]?.getLatLng()).filter(Boolean);
+    if(pts.length===1) map.panTo(pts[0]);
+    if(pts.length>1) map.fitBounds(L.latLngBounds(pts),{padding:[60,60]});
   }
 
   render();
@@ -323,14 +324,18 @@ function render(){
 
     div.innerHTML=`
       <b>${d.name}</b><br>
-      🚗 ${d.speed} km/h<br>
+      📡 ${d.status ?? "?"}<br>
+      🚗 ${d.speed ?? 0} km/h<br>
+      📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
       📡 ${d.accuracy ?? "?"} m<br>
-      🔋 ${d.battery}%<br><br>
+      🔋 ${d.battery ?? "?"}%<br>
+      ⏱ ${formatTime(d.timestamp)}<br><br>
 
       <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
       <button class="stop" onclick="stop('${d.deviceId}')">Stop</button>
-      <button class="follow" onclick="follow('${d.deviceId}')">Follow</button>
-      <button onclick="auto()">Auto</button>
+      <button class="follow" onclick="toggleFollow('${d.deviceId}')">Follow</button>
+      <button onclick="watch('${d.deviceId}')">Watch</button>
+      <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
     `;
 
     el.appendChild(div);
@@ -346,32 +351,31 @@ function stop(id){
   fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/alarm?active=false",{method:"POST"});
 }
 
-function follow(id){
-  followId=id;
+function watch(id){
+  fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/watch?watcherId=web",{method:"POST"});
 }
 
-function auto(){
-  autoFollow=!autoFollow;
+function unwatch(id){
+  fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/unwatch",{method:"POST"});
+}
+
+function toggleFollow(id){
+  if(followTargets.has(id)) followTargets.delete(id);
+  else followTargets.add(id);
+  followMode = followTargets.size>0;
 }
 
 /* ================= LOAD ================= */
 async function load(){
-  try{
-    const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
-    const d=await r.json();
-    if(Array.isArray(d)) d.forEach(update);
-  }catch(e){
-    console.error(e);
-  }
+  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const d=await r.json();
+  d.forEach(update);
 }
 load();
 
 /* ================= WS ================= */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-
-ws.onmessage=(m)=>{
-  try{update(JSON.parse(m.data));}catch(e){}
-};
+ws.onmessage=(m)=>{ try{update(JSON.parse(m.data));}catch(e){} };
 
 </script>
 </body>
