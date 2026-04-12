@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS PRO TRACKING UI</title>
+<title>GPS PRO TRACKING - NEXT LEVEL</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -50,19 +50,39 @@ button {
 .stop { background:#34c759; color:white; }
 .follow { background:#0a84ff; color:white; }
 
-.pulse {
+/* ================= ALARM ANIMATION ================= */
+@keyframes alarmPulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+.alarm-ring {
   position:absolute;
-  width:60px;
-  height:60px;
+  width:70px;
+  height:70px;
   border:3px solid red;
   border-radius:50%;
   transform:translate(-50%,-50%);
-  animation:pulse 1.2s infinite;
+  animation: alarmPulse 1s infinite;
+  box-shadow:0 0 20px red;
 }
 
-@keyframes pulse {
-  0% { transform:scale(1); opacity:0.9; }
-  100% { transform:scale(2); opacity:0; }
+/* shake effect */
+@keyframes shake {
+  0% { transform: translate(0,0); }
+  25% { transform: translate(2px,1px); }
+  50% { transform: translate(-2px,-1px); }
+  75% { transform: translate(2px,-2px); }
+  100% { transform: translate(0,0); }
+}
+
+.shake {
+  animation: shake 0.2s infinite;
+}
+
+/* moving blur trail effect */
+.leaflet-interactive {
+  filter: drop-shadow(0 0 6px rgba(10,132,255,0.5));
 }
 </style>
 </head>
@@ -79,9 +99,6 @@ button {
 
 <script>
 
-console.log("GPS SYSTEM STARTED");
-
-/* ================= MAP ================= */
 const map = L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -92,23 +109,20 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const markers = {};
 const trails = {};
 const last = {};
-const list = [];
 const alarmState = {};
 
 let followId = null;
 let autoFollow = false;
+const list = [];
 
 /* ================= AUDIO ================= */
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
-
 let audioReady = false;
+
 document.addEventListener("click",()=>{
   if(!audioReady){
-    alarmAudio.play().then(()=>{
-      alarmAudio.pause();
-      audioReady = true;
-    }).catch(()=>{});
+    alarmAudio.play().then(()=>{ alarmAudio.pause(); audioReady=true; });
   }
 });
 
@@ -138,8 +152,8 @@ function speak(t){
   speechSynthesis.speak(m);
 }
 
-/* ================= ICON FIXED ================= */
-function icon(name, angle, alarm){
+/* ================= ICON (ACCURACY RING + LETTER + ALARM) ================= */
+function icon(name, angle, alarm, accuracy){
 
   const n = (name || "").toLowerCase();
 
@@ -153,12 +167,27 @@ function icon(name, angle, alarm){
   else if(n.includes("nicole")) letter = "N";
   else letter = (name?.[0] || "?").toUpperCase();
 
+  const acc = accuracy ? Math.max(10, Math.min(accuracy, 100)) : 50;
+
   return L.divIcon({
     className:"",
     html:`
-      <div style="position:relative;width:60px;height:60px;">
+      <div style="position:relative;width:70px;height:70px;">
 
-        ${alarm ? '<div class="pulse"></div>' : ''}
+        <!-- ALARM RING -->
+        ${alarm ? '<div class="alarm-ring"></div>' : ''}
+
+        <!-- ACCURACY RING -->
+        <div style="
+          position:absolute;
+          width:${acc}px;
+          height:${acc}px;
+          border:2px solid rgba(255,255,255,0.25);
+          border-radius:50%;
+          top:50%;
+          left:50%;
+          transform:translate(-50%,-50%);
+        "></div>
 
         <!-- ARROW -->
         <div style="
@@ -166,7 +195,7 @@ function icon(name, angle, alarm){
           top:50%;
           left:50%;
           transform:translate(-50%,-50%) rotate(${angle}deg);
-          font-size:42px;
+          font-size:40px;
           color:${color};
           text-shadow:0 0 6px rgba(0,0,0,0.6);
         ">
@@ -179,18 +208,24 @@ function icon(name, angle, alarm){
           top:50%;
           left:50%;
           transform:translate(-50%,-50%);
-          font-size:14px;
-          font-weight:700;
+          width:20px;
+          height:20px;
+          border-radius:50%;
+          background:rgba(0,0,0,0.6);
+          display:flex;
+          align-items:center;
+          justify-content:center;
           color:white;
-          text-shadow:0 0 3px rgba(0,0,0,0.9);
+          font-size:12px;
+          font-weight:700;
         ">
           ${letter}
         </div>
 
       </div>
     `,
-    iconSize:[60,60],
-    iconAnchor:[30,30]
+    iconSize:[70,70],
+    iconAnchor:[35,35]
   });
 }
 
@@ -223,29 +258,38 @@ function update(d){
 
   if(!markers[id]){
     markers[id]=L.marker([lat,lon],{
-      icon:icon(d.name,angle,d.alarmActive)
+      icon:icon(d.name,angle,d.alarmActive,d.accuracy)
     }).addTo(map);
 
     markers[id].trail=L.polyline([],{
       color:"#0a84ff",
-      weight:3
+      weight:3,
+      opacity:0.8
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name,angle,d.alarmActive));
+  markers[id].setIcon(icon(d.name,angle,d.alarmActive,d.accuracy));
   markers[id].trail.setLatLngs(trails[id]);
 
   const ex=list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
 
-  /* ALARM */
+  /* ALARM SYSTEM */
   if(d.alarmActive && !alarmState[id]){
     alarmState[id]=true;
+
     if(audioReady) alarmAudio.play();
     speak("Alarm bei "+d.name);
+
     map.flyTo([lat,lon],18);
+
+    // shake effect on panel
+    document.getElementById("panel").classList.add("shake");
+    setTimeout(()=>{
+      document.getElementById("panel").classList.remove("shake");
+    },1500);
   }
 
   if(!d.alarmActive && alarmState[id]){
@@ -280,6 +324,7 @@ function render(){
     div.innerHTML=`
       <b>${d.name}</b><br>
       🚗 ${d.speed} km/h<br>
+      📡 ${d.accuracy ?? "?"} m<br>
       🔋 ${d.battery}%<br><br>
 
       <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
