@@ -2,10 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS ULTRA PRO FIXED</title>
+<title>GPS ULTRA PRO FINAL</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.css"></script>
 
 <style>
 body {
@@ -14,25 +14,19 @@ body {
   background: #0b0f14;
 }
 
-#map {
-  height: 100vh;
-}
+#map { height: 100vh; }
 
-/* PANEL */
 #panel {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 9999;
-
   width: 330px;
   max-height: 85vh;
   overflow: auto;
-
   background: rgba(20,20,20,0.85);
   backdrop-filter: blur(14px);
   color: white;
-
   padding: 14px;
   border-radius: 14px;
 }
@@ -46,13 +40,43 @@ body {
 .device:hover {
   background: rgba(255,255,255,0.06);
 }
+
+button {
+  margin: 3px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.alarm-on { background:#ff3b30; color:white; }
+.alarm-off { background:#34c759; color:white; }
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  70% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.pulse-ring {
+  position:absolute;
+  width:60px;
+  height:60px;
+  border:3px solid red;
+  border-radius:50%;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  animation: pulse 1.2s infinite;
+}
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <b>🚗 GPS ULTRA PRO FIX</b>
+  <b>🚗 GPS ULTRA PRO FINAL</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -61,51 +85,73 @@ body {
 
 <script>
 
-/* =========================
-   MAP
-========================= */
+/* ===================== MAP ===================== */
 const map = L.map("map").setView([47.09, 15.42], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap"
+  attribution:"© OpenStreetMap"
 }).addTo(map);
 
-/* =========================
-   STATE (IMPORTANT FIX)
-========================= */
+/* ===================== STATE ===================== */
 const markers = {};
 const lastRaw = {};
 const deviceList = [];
 
-/* =========================
-   SAFE NUMBER
-========================= */
+const alarmState = {};
+let followDeviceId = null;
+let followMode = false;
+
+let alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+alarmAudio.loop = true;
+
+let audioUnlocked = false;
+
+document.addEventListener("click", () => {
+  if(!audioUnlocked){
+    alarmAudio.play().then(()=>{
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      audioUnlocked = true;
+    }).catch(()=>{});
+  }
+});
+
+/* ===================== HELPERS ===================== */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
-/* =========================
-   VECTOR BEARING
-========================= */
-function bearing(lat1, lon1, lat2, lon2){
-
-  const toRad = d => d * Math.PI / 180;
-  const toDeg = r => r * 180 / Math.PI;
-
-  const dLon = toRad(lon2 - lon1);
-
-  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
-  const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
-
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+function distance(lat1, lon1, lat2, lon2){
+  const R=6371000,toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1);
+  const dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+
+    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
+    Math.sin(dLon/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-/* =========================
-   ICON
-========================= */
-function icon(name, angle){
+function bearing(lat1,lon1,lat2,lon2){
+  const toRad=d=>d*Math.PI/180,toDeg=r=>r*180/Math.PI;
+  const dLon=toRad(lon2-lon1);
+  const y=Math.sin(dLon)*Math.cos(toRad(lat2));
+  const x=Math.cos(toRad(lat1))*Math.sin(toRad(lat2))-
+    Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLon);
+  return (toDeg(Math.atan2(y,x))+360)%360;
+}
+
+/* ===================== SPEECH ===================== */
+function speak(text){
+  if(!("speechSynthesis" in window)) return;
+  const msg=new SpeechSynthesisUtterance(text);
+  msg.lang="de-DE";
+  speechSynthesis.cancel();
+  speechSynthesis.speak(msg);
+}
+
+/* ===================== ICON ===================== */
+function icon(name, angle, alarm){
 
   const color =
+    alarm ? "#ff3b30" :
     name?.toLowerCase().includes("nicole") ? "#ff3b30" :
     name?.toLowerCase().includes("oliver") ? "#0a84ff" :
     "#2ecc71";
@@ -115,130 +161,153 @@ function icon(name, angle){
   return L.divIcon({
     className:"",
     html:`
-      <div style="
-        transform:rotate(${angle}deg);
-        font-size:42px;
-        color:${color};
-        text-shadow:0 0 4px black;
-        position:relative;
-      ">
-        ➤
-        <div style="
-          position:absolute;
-          top:50%;
-          left:50%;
-          transform:translate(-50%,-50%) rotate(-${angle}deg);
-          color:white;
-          font-size:13px;
-          font-weight:bold;
-        ">
-          ${letter}
+      <div style="position:relative;width:60px;height:60px;">
+        ${alarm ? '<div class="pulse-ring"></div>' : ''}
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${angle}deg);font-size:42px;color:${color};text-shadow:0 0 4px black;">
+          ➤
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-${angle}deg);color:white;font-size:13px;font-weight:bold;">
+            ${letter}
+          </div>
         </div>
       </div>
     `,
-    iconSize:[42,42],
-    iconAnchor:[21,21]
+    iconSize:[60,60],
+    iconAnchor:[30,30]
   });
 }
 
-/* =========================
-   UPDATE DEVICE (WS + LOAD)
-========================= */
+/* ===================== UPDATE ===================== */
 function update(d){
 
-  const id = d.deviceId;
+  const id=d.deviceId;
+  const lat=n(d.lat);
+  const lon=n(d.lon);
+  if(lat===null||lon===null)return;
 
-  const lat = n(d.lat);
-  const lon = n(d.lon);
+  const prev=lastRaw[id];
 
-  if(lat === null || lon === null) return;
-
-  const prev = lastRaw[id];
-
-  let angle = 0;
-
-  // 🔥 VECTOR: ONLY RAW → RAW
   if(prev){
-    angle = bearing(prev.lat, prev.lon, lat, lon);
+    const dist=distance(prev.lat,prev.lon,lat,lon);
+    if(dist<5) return;
   }
 
-  lastRaw[id] = {lat, lon};
+  let angle=0;
+  if(prev) angle=bearing(prev.lat,prev.lon,lat,lon);
 
-  // marker create
+  lastRaw[id]={lat,lon};
+
   if(!markers[id]){
-    markers[id] = L.marker([lat, lon], {
-      icon: icon(d.name, angle)
+    markers[id]=L.marker([lat,lon],{
+      icon:icon(d.name,angle,d.alarmActive)
     }).addTo(map);
-  } else {
-    markers[id].setLatLng([lat, lon]);
-    markers[id].setIcon(icon(d.name, angle));
+  }else{
+    markers[id].setLatLng([lat,lon]);
+    markers[id].setIcon(icon(d.name,angle,d.alarmActive));
   }
 
-  // store list (NO DUPLICATES)
-  if(!deviceList.find(x => x.deviceId === id)){
-    deviceList.push(d);
-    render();
+  const ex=deviceList.find(x=>x.deviceId===id);
+  if(!ex) deviceList.push(d);
+  else Object.assign(ex,d);
+
+  /* ===================== ALARM ===================== */
+  if(d.alarmActive && !alarmState[id]){
+    alarmState[id]=true;
+
+    if(audioUnlocked){
+      alarmAudio.currentTime=0;
+      alarmAudio.play().catch(()=>{});
+    }
+
+    speak(`Alarm ausgelöst bei ${d.name}`);
+
+    map.flyTo([lat,lon],18,{duration:0.8});
   }
+
+  if(!d.alarmActive && alarmState[id]){
+    alarmState[id]=false;
+    alarmAudio.pause();
+    alarmAudio.currentTime=0;
+    speak(`Alarm beendet bei ${d.name}`);
+  }
+
+  /* ===================== FOLLOW ===================== */
+  if(followMode && followDeviceId===id){
+    map.panTo([lat,lon],{animate:true,duration:0.5});
+  }
+
+  render();
 }
 
-/* =========================
-   RENDER LIST (CLEAN)
-========================= */
+/* ===================== RENDER ===================== */
 function render(){
 
-  const el = document.getElementById("list");
-  el.innerHTML = "";
+  const el=document.getElementById("list");
+  el.innerHTML="";
 
-  deviceList.forEach(d => {
+  deviceList.forEach(d=>{
 
-    const div = document.createElement("div");
-    div.className = "device";
+    const div=document.createElement("div");
+    div.className="device";
 
-    div.innerHTML = `
+    if(d.alarmActive) div.style.borderLeft="4px solid red";
+
+    div.innerHTML=`
       <b>${d.name}</b><br>
       🚗 ${d.speed} km/h<br>
-      🔋 ${d.battery}%
+      📡 ${d.accuracy??"?"} m<br>
+      🔋 ${d.battery}%<br><br>
+
+      <button class="alarm-on" onclick="alarmOn('${d.deviceId}')">🚨 Alarm</button>
+      <button class="alarm-off" onclick="alarmOff('${d.deviceId}')">🛑 Stop</button>
+      <button onclick="toggleFollow('${d.deviceId}')">👁 Follow</button>
     `;
 
-    div.onclick = () => {
-      map.setView([d.lat, d.lon], 17);
+    div.onclick=(e)=>{
+      if(e.target.tagName!=="BUTTON"){
+        map.setView([d.lat,d.lon],17);
+      }
     };
 
     el.appendChild(div);
   });
 }
 
-/* =========================
-   LOAD INITIAL DATA
-========================= */
-async function load(){
-
-  try {
-    const res = await fetch("https://gps-server-f9b6.onrender.com/devices");
-    const data = await res.json();
-
-    data.forEach(update);
-
-  } catch(e){
-    console.error("LOAD ERROR:", e);
-  }
+/* ===================== CONTROLS ===================== */
+function alarmOn(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=true`,{method:"POST"});
 }
 
+function alarmOff(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=false`,{method:"POST"});
+}
+
+function toggleFollow(id){
+  if(followDeviceId===id){
+    followDeviceId=null;
+    followMode=false;
+    return;
+  }
+
+  followDeviceId=id;
+  followMode=true;
+
+  const d=deviceList.find(x=>x.deviceId===id);
+  if(d) map.flyTo([d.lat,d.lon],18);
+}
+
+/* ===================== LOAD ===================== */
+async function load(){
+  const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data=await res.json();
+  data.forEach(update);
+}
 load();
 
-/* =========================
-   WEBSOCKET LIVE UPDATES
-========================= */
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+/* ===================== WS ===================== */
+const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-ws.onopen = () => console.log("🟢 WS connected");
-
-ws.onerror = (e) => console.error("❌ WS error", e);
-
-ws.onmessage = (m) => {
-  try {
-    update(JSON.parse(m.data));
-  } catch(e){}
+ws.onmessage=(m)=>{
+  try{update(JSON.parse(m.data));}catch(e){}
 };
 
 </script>
