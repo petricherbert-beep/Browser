@@ -2,49 +2,52 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS CLEAN REBUILD</title>
+<title>GPS Realtime Pro</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-rotatedmarker/leaflet.rotatedMarker.js"></script>
 
 <style>
 body { margin:0; font-family:system-ui; background:#0b0f14; }
 #map { height:100vh; }
 
-#panel {
+#panel{
   position:absolute;
-  top:12px; left:12px;
-  width:400px;
-  max-height:85vh;
+  top:10px; left:10px;
+  width:360px;
+  max-height:90vh;
   overflow:auto;
-  background:rgba(20,20,20,0.92);
-  backdrop-filter:blur(14px);
+  background:rgba(20,20,20,0.9);
   color:white;
-  padding:12px;
-  border-radius:14px;
+  padding:10px;
+  border-radius:12px;
   z-index:9999;
 }
 
-button {
-  margin:3px;
-  padding:6px 8px;
-  border:none;
-  border-radius:8px;
+.device{
+  border-bottom:1px solid #333;
+  padding:10px 0;
+}
+
+button{
+  margin:2px;
+  padding:5px 7px;
   font-size:12px;
+  border:none;
+  border-radius:6px;
   cursor:pointer;
 }
 
-.follow { background:#0a84ff; color:white; }
-.watch { background:#ffcc00; color:black; }
-.alarm { background:#ff3b30; color:white; }
+.watch{background:#ffcc00;}
+.follow{background:#0a84ff;color:white;}
+.alarm{background:#ff3b30;color:white;}
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <b>🧠 CLEAN GPS SYSTEM</b>
+  <b>🚗 GPS Realtime Pro</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -54,23 +57,20 @@ button {
 <script>
 
 /* =========================
-   1. STATE LAYER
+   STATE
 ========================= */
 
-const state = {
-  devices: {},
-  markers: {},
-  tracks: {},
-  lastPos: {},
-  heading: {},
-  watch: {},
-  follow: {},
-  activeFollow: null,
-  alarm: {}
-};
+const devices = {};
+const markers = {};
+const tracks = {};
+const lastPos = {};
+const heading = {};
+
+let followId = null;
+let lastPan = 0;
 
 /* =========================
-   2. MAP INIT
+   MAP
 ========================= */
 
 const map = L.map("map").setView([47.09,15.42],13);
@@ -80,10 +80,10 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 /* =========================
-   3. HELPERS
+   HELPERS
 ========================= */
 
-const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
+const n = v => Number(v);
 
 function color(name){
   const n=(name||"").toLowerCase();
@@ -92,51 +92,48 @@ function color(name){
   return "#4dffb5";
 }
 
+/* FIXED HEADING (NO EAST BUG) */
 function bearing(a,b,c,d){
-  const toRad=x=>x*Math.PI/180,toDeg=x=>x*180/Math.PI;
-  const y=Math.sin(toRad(d-b))*Math.cos(toRad(c));
-  const x=Math.cos(toRad(a))*Math.sin(toRad(c))-
-    Math.sin(toRad(a))*Math.cos(toRad(c))*Math.cos(toRad(d-b));
-  return (toDeg(Math.atan2(y,x))+360)%360;
+
+  const toRad = x => x * Math.PI / 180;
+  const toDeg = x => x * 180 / Math.PI;
+
+  const y = Math.sin(toRad(d - b)) * Math.cos(toRad(c));
+  const x = Math.cos(toRad(c)) * Math.sin(toRad(c)) -
+            Math.sin(toRad(a)) * Math.cos(toRad(c)) *
+            Math.cos(toRad(d - b));
+
+  return (toDeg(Math.atan2(y,x)) + 360) % 360;
 }
 
 /* =========================
-   4. ICON
+   MARKER ICON (NO CIRCLE)
 ========================= */
 
-function icon(name){
+function icon(name, angle){
 
   const col = color(name);
   const letter = (name?.[0] || "?").toUpperCase();
 
   return L.divIcon({
     className:"",
+    iconSize:[50,50],
+    iconAnchor:[25,25],
+
     html:`
-      <div style="
-        width:70px;height:70px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        position:relative;
-      ">
+      <div style="position:relative;width:50px;height:50px;
+        display:flex;align-items:center;justify-content:center;">
 
         <div style="
-          position:absolute;
-          width:16px;height:16px;
-          border-radius:50%;
-          background:${col};
-        "></div>
-
-        <div style="
-          font-size:34px;
+          font-size:28px;
           color:${col};
-          transform: rotate(0deg);
+          transform: rotate(${angle||0}deg);
         ">▲</div>
 
         <div style="
           position:absolute;
-          font-size:11px;
-          font-weight:800;
+          font-size:12px;
+          font-weight:700;
           color:white;
         ">${letter}</div>
 
@@ -146,7 +143,7 @@ function icon(name){
 }
 
 /* =========================
-   5. UPDATE CORE (REALTIME)
+   REALTIME UPDATE
 ========================= */
 
 function update(d){
@@ -154,133 +151,139 @@ function update(d){
   const id = d.deviceId;
   const lat = n(d.lat);
   const lon = n(d.lon);
-  if(lat===null||lon===null) return;
 
-  const prev = state.lastPos[id];
+  if(!lat || !lon) return;
 
-  let heading = state.heading[id];
+  const prev = lastPos[id];
 
-  if(prev){
+  let angle = heading[id] || 0;
 
-    const moved =
-      Math.abs(lat-prev.lat)>0.00001 ||
-      Math.abs(lon-prev.lon)>0.00001;
-
-    if(moved && (d.speed ?? 0) > 0.5){
-      heading = bearing(prev.lat,prev.lon,lat,lon);
-      state.heading[id]=heading;
-    }
+  if(prev && (d.speed ?? 0) > 0.5){
+    angle = bearing(prev.lat,prev.lon,lat,lon);
+    heading[id] = angle;
   }
 
-  state.lastPos[id]={lat,lon};
-  state.devices[id]=d;
+  lastPos[id] = {lat,lon};
 
-  /* MARKER */
-  if(!state.markers[id]){
+  devices[id] = d;
 
-    state.markers[id]=L.marker([lat,lon],{
-      icon:icon(d.name),
-      rotationAngle:0,
-      rotationOrigin:"center"
+  /* marker */
+  if(!markers[id]){
+    markers[id] = L.marker([lat,lon],{
+      icon: icon(d.name, angle)
     }).addTo(map);
 
-    state.tracks[id]=L.polyline([],{
-      color:color(d.name),
-      weight:4,
-      opacity:0.8
+    tracks[id] = L.polyline([], {
+      color: color(d.name),
+      weight: 4,
+      opacity: 0.8
     }).addTo(map);
   }
 
-  state.markers[id].setLatLng([lat,lon]);
-  state.markers[id].setRotationAngle(heading||0);
+  markers[id].setLatLng([lat,lon]);
+  markers[id].setIcon(icon(d.name, angle));
 
-  state.tracks[id].addLatLng([lat,lon]);
+  tracks[id].addLatLng([lat,lon]);
 
   /* FOLLOW */
-  if(state.activeFollow === id){
-    map.panTo([lat,lon],{animate:true,duration:0.2});
+  if(followId === id){
+    const now = Date.now();
+    if(now - lastPan > 300){
+      lastPan = now;
+      map.panTo([lat,lon], {animate:true,duration:0.25});
+    }
   }
-
-  /* ALARM */
-  state.alarm[id]=d.alarmActive;
 
   render();
 }
 
 /* =========================
-   6. ACTIONS
-========================= */
-
-function watch(id){
-  state.watch[id]=true;
-  fetch(`/devices/${id}/watch`,{method:"POST"});
-}
-
-function unwatch(id){
-  state.watch[id]=false;
-  fetch(`/devices/${id}/unwatch`,{method:"POST"});
-}
-
-function follow(id){
-  state.activeFollow=id;
-}
-
-function toggleAlarm(id){
-
-  const newState = !state.alarm[id];
-  state.alarm[id]=newState;
-
-  fetch(`/devices/${id}/alarm`,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ alarmActive:newState })
-  });
-}
-
-/* =========================
-   7. UI (LIGHTWEIGHT)
+   UI
 ========================= */
 
 function render(){
 
-  const el=document.getElementById("list");
-  el.innerHTML="";
+  const el = document.getElementById("list");
+  el.innerHTML = "";
 
-  Object.values(state.devices).forEach(d=>{
+  Object.values(devices).forEach(d => {
 
-    const speed=(d.speed??0)*3.6;
+    const speed = (d.speed ?? 0) * 3.6;
 
-    el.innerHTML+=`
-      <div style="padding:10px;border-bottom:1px solid #333;">
+    el.innerHTML += `
+      <div class="device">
         <b>${d.name}</b><br>
+
         📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
         🚗 ${speed.toFixed(1)} km/h<br>
-        🔋 ${d.battery??"-"}%<br>
-        📡 ${d.status??"unknown"}<br>
-
-        <div style="color:${state.alarm[d.deviceId] ? '#ff3b30' : '#888'};">
-          ${state.alarm[d.deviceId] ? "🚨 ALARM" : "OK"}
-        </div>
+        🔋 ${d.battery ?? "-"}%<br>
+        📡 ${d.status ?? "unknown"}<br>
+        🎯 accuracy: ${d.accuracy ?? "-"}m<br>
+        ⏱ ${new Date(d.timestamp || Date.now()).toLocaleTimeString()}<br>
+        🚨 ${d.alarmActive ? "ALARM ON" : "OK"}<br>
 
         <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
         <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
         <button class="follow" onclick="follow('${d.deviceId}')">Follow</button>
-        <button class="alarm" onclick="toggleAlarm('${d.deviceId}')">Alarm</button>
+        <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
       </div>
     `;
   });
 }
 
 /* =========================
-   8. DATA LAYER (WS)
+   ACTIONS
 ========================= */
 
-const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+}
 
-ws.onmessage=(m)=>{
-  try{
-    update(JSON.parse(m.data));
-  }catch(e){}
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
+
+function follow(id){
+  followId = id;
+}
+
+function alarm(id){
+  const d = devices[id];
+  const newState = !d.alarmActive;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${newState}`,{
+    method:"POST"
+  });
+}
+
+/* =========================
+   INITIAL LOAD
+========================= */
+
+async function load(){
+  const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data = await r.json();
+  data.forEach(update);
+}
+load();
+
+/* =========================
+   WEBSOCKET
+========================= */
+
+const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+
+ws.onmessage = (m) => {
+  try {
+    const data = JSON.parse(m.data);
+
+    if(Array.isArray(data)){
+      data.forEach(update);
+    } else {
+      update(data);
+    }
+
+  } catch(e){}
 };
 
 </script>
