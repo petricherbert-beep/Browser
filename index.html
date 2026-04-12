@@ -130,33 +130,29 @@ function icon(name, angle, accuracy, isWatched){
           border-radius:50%;
         "></div>
 
-        <div style="
-          font-size:38px;
-          color:${color};
-          transform: rotate(${angle - 90}deg);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          height:70px;
-        ">➤</div>
-
-        <!-- 🔥 FIX: perfekt zentriertes O/N -->
+        <!-- 🔥 FIX: korrekt gedrehter Pfeil + zentriertes O/N -->
         <div style="
           position:absolute;
-          top:50%;
-          left:50%;
-          transform: translate(-50%, -50%);
-          width:22px;
-          height:22px;
-          border-radius:50%;
-          background:rgba(0,0,0,0.65);
-          color:white;
-          font-size:12px;
+          width:100%;
+          height:100%;
           display:flex;
           align-items:center;
           justify-content:center;
+          transform: rotate(${angle}deg);
+          font-size:38px;
+          color:${color};
         ">
-          ${letter}
+          <div style="position:relative; display:flex; align-items:center; justify-content:center;">
+            ➤
+            <span style="
+              position:absolute;
+              font-size:12px;
+              font-weight:600;
+              color:white;
+            ">
+              ${letter}
+            </span>
+          </div>
         </div>
 
       </div>
