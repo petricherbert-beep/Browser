@@ -79,6 +79,8 @@ button {
 
 <script>
 
+console.log("GPS SYSTEM STARTED");
+
 /* ================= MAP ================= */
 const map = L.map("map").setView([47.09,15.42],13);
 
@@ -99,8 +101,8 @@ let autoFollow = false;
 /* ================= AUDIO ================= */
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
-let audioReady = false;
 
+let audioReady = false;
 document.addEventListener("click",()=>{
   if(!audioReady){
     alarmAudio.play().then(()=>{
@@ -136,21 +138,29 @@ function speak(t){
   speechSynthesis.speak(m);
 }
 
-/* ================= ICON (FIXED COLORS) ================= */
+/* ================= ICON FIXED ================= */
 function icon(name, angle, alarm){
 
   const n = (name || "").toLowerCase();
 
   const color =
-    n.includes("oliver") ? "#0a84ff" :   // 🔵
-    n.includes("nicole") ? "#ff3b30" :   // 🔴
-    "#2ecc71";                           // 🟢
+    n.includes("oliver") ? "#0a84ff" :
+    n.includes("nicole") ? "#ff3b30" :
+    "#2ecc71";
+
+  let letter = "?";
+  if(n.includes("oliver")) letter = "O";
+  else if(n.includes("nicole")) letter = "N";
+  else letter = (name?.[0] || "?").toUpperCase();
 
   return L.divIcon({
     className:"",
     html:`
       <div style="position:relative;width:60px;height:60px;">
+
         ${alarm ? '<div class="pulse"></div>' : ''}
+
+        <!-- ARROW -->
         <div style="
           position:absolute;
           top:50%;
@@ -162,6 +172,21 @@ function icon(name, angle, alarm){
         ">
           ➤
         </div>
+
+        <!-- LETTER -->
+        <div style="
+          position:absolute;
+          top:50%;
+          left:50%;
+          transform:translate(-50%,-50%);
+          font-size:14px;
+          font-weight:700;
+          color:white;
+          text-shadow:0 0 3px rgba(0,0,0,0.9);
+        ">
+          ${letter}
+        </div>
+
       </div>
     `,
     iconSize:[60,60],
