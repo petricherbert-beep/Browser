@@ -67,14 +67,12 @@ button {
 
 <script>
 
-/* ================= MAP ================= */
 const map = L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution:"© OpenStreetMap"
 }).addTo(map);
 
-/* ================= STATE ================= */
 const markers = {};
 const list = [];
 const last = {};
@@ -83,7 +81,6 @@ const angles = {};
 let followTargets = new Set();
 let followMode = false;
 
-/* ================= HELPERS ================= */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
 function getColor(name){
@@ -93,6 +90,7 @@ function getColor(name){
   return "#4dffb5";
 }
 
+/* 🧭 Bearing */
 function bearing(a,b,c,d){
   const toRad=x=>x*Math.PI/180,toDeg=x=>x*180/Math.PI;
   const y=Math.sin(toRad(d-b))*Math.cos(toRad(c));
@@ -101,7 +99,7 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ================= ICON ================= */
+/* 📍 ICON */
 function icon(name, angle, accuracy, isWatched){
 
   const color = getColor(name);
@@ -111,14 +109,7 @@ function icon(name, angle, accuracy, isWatched){
   return L.divIcon({
     className:"",
     html:`
-      <div style="
-        width:70px;
-        height:70px;
-        position:relative;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-      ">
+      <div style="width:70px;height:70px;position:relative;">
 
         ${isWatched ? `
           <div style="
@@ -128,7 +119,6 @@ function icon(name, angle, accuracy, isWatched){
             border:2px solid gold;
             border-radius:50%;
             animation:pulse 1.5s infinite;
-            pointer-events:none;
           "></div>
         ` : ''}
 
@@ -138,24 +128,30 @@ function icon(name, angle, accuracy, isWatched){
           height:${acc}px;
           border:2px solid rgba(255,255,255,0.2);
           border-radius:50%;
-          pointer-events:none;
         "></div>
 
         <div style="
           font-size:38px;
           color:${color};
-          transform: rotate(${angle}deg);
+          transform: rotate(${angle - 90}deg);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          height:70px;
         ">➤</div>
 
+        <!-- 🔥 FIX: perfekt zentriertes O/N -->
         <div style="
           position:absolute;
-          top:6px;
-          width:18px;
-          height:18px;
+          top:50%;
+          left:50%;
+          transform: translate(-50%, -50%);
+          width:22px;
+          height:22px;
           border-radius:50%;
           background:rgba(0,0,0,0.65);
           color:white;
-          font-size:11px;
+          font-size:12px;
           display:flex;
           align-items:center;
           justify-content:center;
@@ -170,7 +166,7 @@ function icon(name, angle, accuracy, isWatched){
   });
 }
 
-/* ================= UPDATE ================= */
+/* 📡 UPDATE */
 function update(d){
 
   const id = d.deviceId;
@@ -180,11 +176,14 @@ function update(d){
 
   const prev = last[id];
 
-  let angle = 0;
-  if(prev) angle = bearing(prev.lat,prev.lon,lat,lon);
+  let angle = angles[id] || 0;
+
+  if(prev && (lat !== prev.lat || lon !== prev.lon)){
+    angle = bearing(prev.lat,prev.lon,lat,lon);
+    angles[id] = angle;
+  }
 
   last[id] = {lat,lon};
-  angles[id] = angle;
 
   if(!markers[id]){
     markers[id] = L.marker([lat,lon],{
@@ -198,8 +197,6 @@ function update(d){
   const ex = list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
-
-  /* ================= FOLLOW MODE ================= */
 
   if(followTargets.has(id)){
     map.panTo([lat,lon]);
@@ -215,23 +212,19 @@ function update(d){
     }
 
     if(pts.length > 1){
-      map.fitBounds(L.latLngBounds(pts), {
-        padding: [60,60]
-      });
+      map.fitBounds(L.latLngBounds(pts), {padding:[60,60]});
     }
   }
 
   render();
 }
 
-/* ================= UI ================= */
+/* UI */
 function render(){
-
   const el = document.getElementById("list");
   el.innerHTML = "";
 
   list.forEach(d => {
-
     const div = document.createElement("div");
     div.className = "device";
 
@@ -249,7 +242,7 @@ function render(){
   });
 }
 
-/* ================= ACTIONS ================= */
+/* ACTIONS */
 function watch(id){
   fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/watch",{method:"POST"});
 }
@@ -259,17 +252,15 @@ function unwatch(id){
 }
 
 function toggleFollow(id){
-
   if(followTargets.has(id)){
     followTargets.delete(id);
   } else {
     followTargets.add(id);
   }
-
   followMode = followTargets.size > 0;
 }
 
-/* ================= LOAD ================= */
+/* LOAD */
 async function load(){
   const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
   const d = await r.json();
@@ -277,7 +268,7 @@ async function load(){
 }
 load();
 
-/* ================= WS ================= */
+/* WS */
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 ws.onmessage = (m)=>{ try{ update(JSON.parse(m.data)); }catch(e){} };
 
