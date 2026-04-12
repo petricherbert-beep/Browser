@@ -41,6 +41,11 @@ button{
 .watch{background:#ffcc00;}
 .follow{background:#0a84ff;color:white;}
 .alarm{background:#ff3b30;color:white;}
+
+@keyframes pulseWatch {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
 </style>
 </head>
 
@@ -48,6 +53,7 @@ button{
 
 <div id="panel">
   <b>🚗 GPS Realtime Pro</b>
+  <button onclick="toggleNav()">Nav</button>
   <hr>
   <div id="list"></div>
 </div>
@@ -56,9 +62,7 @@ button{
 
 <script>
 
-/* =========================
-   STATE
-========================= */
+/* ================= STATE ================= */
 
 const devices = {};
 const markers = {};
@@ -67,11 +71,15 @@ const lastPos = {};
 const heading = {};
 
 let followId = null;
+let navMode = false;
 let lastPan = 0;
 
-/* =========================
-   MAP
-========================= */
+/* 🔊 Alarm */
+const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+alarmAudio.loop = true;
+let activeAlarmDevice = null;
+
+/* ================= MAP ================= */
 
 const map = L.map("map").setView([47.09,15.42],13);
 
@@ -79,11 +87,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution:"© OpenStreetMap"
 }).addTo(map);
 
-/* =========================
-   HELPERS
-========================= */
-
-const n = v => Number(v);
+/* ================= HELPERS ================= */
 
 function color(name){
   const n=(name||"").toLowerCase();
@@ -92,39 +96,57 @@ function color(name){
   return "#4dffb5";
 }
 
-/* FIXED HEADING (NO EAST BUG) */
-function bearing(a,b,c,d){
-
+function bearing(lat1, lon1, lat2, lon2){
   const toRad = x => x * Math.PI / 180;
   const toDeg = x => x * 180 / Math.PI;
 
-  const y = Math.sin(toRad(d - b)) * Math.cos(toRad(c));
-  const x = Math.cos(toRad(c)) * Math.sin(toRad(c)) -
-            Math.sin(toRad(a)) * Math.cos(toRad(c)) *
-            Math.cos(toRad(d - b));
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δλ = toRad(lon2 - lon1);
+
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
 
   return (toDeg(Math.atan2(y,x)) + 360) % 360;
 }
 
-/* =========================
-   MARKER ICON (NO CIRCLE)
-========================= */
+/* ================= ICON ================= */
 
-function icon(name, angle){
+function icon(name, angle, isWatched){
 
   const col = color(name);
   const letter = (name?.[0] || "?").toUpperCase();
 
   return L.divIcon({
     className:"",
-    iconSize:[50,50],
-    iconAnchor:[25,25],
+    iconSize:[60,60],
+    iconAnchor:[30,30],
 
     html:`
-      <div style="position:relative;width:50px;height:50px;
+      <div style="position:relative;width:60px;height:60px;
         display:flex;align-items:center;justify-content:center;">
 
+        ${isWatched ? `
+          <div style="
+            position:absolute;
+            width:70px;height:70px;
+            border:2px solid gold;
+            border-radius:50%;
+            animation:pulseWatch 1.5s infinite;
+          "></div>
+        ` : ""}
+
         <div style="
+          position:absolute;
+          font-size:30px;
+          color:black;
+          transform: rotate(${angle||0}deg);
+        ">▲</div>
+
+        <div style="
+          position:absolute;
           font-size:28px;
           color:${col};
           transform: rotate(${angle||0}deg);
@@ -132,8 +154,8 @@ function icon(name, angle){
 
         <div style="
           position:absolute;
-          font-size:12px;
-          font-weight:700;
+          font-size:11px;
+          font-weight:800;
           color:white;
         ">${letter}</div>
 
@@ -142,35 +164,35 @@ function icon(name, angle){
   });
 }
 
-/* =========================
-   REALTIME UPDATE
-========================= */
+/* ================= UPDATE ================= */
 
 function update(d){
 
   const id = d.deviceId;
-  const lat = n(d.lat);
-  const lon = n(d.lon);
-
+  const lat = Number(d.lat);
+  const lon = Number(d.lon);
   if(!lat || !lon) return;
 
   const prev = lastPos[id];
-
   let angle = heading[id] || 0;
 
   if(prev && (d.speed ?? 0) > 0.5){
-    angle = bearing(prev.lat,prev.lon,lat,lon);
-    heading[id] = angle;
+    const moved =
+      Math.abs(lat-prev.lat) > 0.00001 ||
+      Math.abs(lon-prev.lon) > 0.00001;
+
+    if(moved){
+      angle = bearing(prev.lat, prev.lon, lat, lon);
+      heading[id] = angle;
+    }
   }
 
   lastPos[id] = {lat,lon};
-
   devices[id] = d;
 
-  /* marker */
   if(!markers[id]){
     markers[id] = L.marker([lat,lon],{
-      icon: icon(d.name, angle)
+      icon: icon(d.name, angle, d.isWatched)
     }).addTo(map);
 
     tracks[id] = L.polyline([], {
@@ -181,25 +203,81 @@ function update(d){
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name, angle));
+
+  const displayAngle = navMode ? 0 : angle;
+  markers[id].setIcon(icon(d.name, displayAngle, d.isWatched));
 
   tracks[id].addLatLng([lat,lon]);
 
   /* FOLLOW */
   if(followId === id){
-    const now = Date.now();
-    if(now - lastPan > 300){
-      lastPan = now;
-      map.panTo([lat,lon], {animate:true,duration:0.25});
+
+    if(navMode){
+      navigationCamera(lat, lon, angle);
+    } else {
+      normalFollow(lat, lon);
+    }
+  }
+
+  /* 🔊 Alarm nur für Follow */
+  if(followId === id){
+
+    if(d.alarmActive && activeAlarmDevice !== id){
+      alarmAudio.play().catch(()=>{});
+      activeAlarmDevice = id;
+    }
+
+    if(!d.alarmActive && activeAlarmDevice === id){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
+    }
+
+  } else {
+    if(activeAlarmDevice){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
     }
   }
 
   render();
 }
 
-/* =========================
-   UI
-========================= */
+/* ================= CAMERA ================= */
+
+function normalFollow(lat, lon){
+  const now = Date.now();
+  if(now - lastPan < 300) return;
+
+  lastPan = now;
+
+  map.panTo([lat,lon], {animate:true,duration:0.25});
+}
+
+function navigationCamera(lat, lon, angle){
+
+  const now = Date.now();
+  if(now - lastPan < 200) return;
+
+  lastPan = now;
+
+  const mapPane = document.querySelector(".leaflet-map-pane");
+  if(mapPane){
+    mapPane.style.transform = `rotate(${-angle}deg)`;
+    mapPane.style.transformOrigin = "50% 50%";
+  }
+
+  const offsetLat = lat + 0.0003 * Math.cos(angle * Math.PI/180);
+  const offsetLon = lon + 0.0003 * Math.sin(angle * Math.PI/180);
+
+  map.setView([offsetLat, offsetLon], 17, {
+    animate:true,
+    duration:0.3
+  });
+}
+
+/* ================= UI ================= */
 
 function render(){
 
@@ -218,9 +296,9 @@ function render(){
         🚗 ${speed.toFixed(1)} km/h<br>
         🔋 ${d.battery ?? "-"}%<br>
         📡 ${d.status ?? "unknown"}<br>
-        🎯 accuracy: ${d.accuracy ?? "-"}m<br>
-        ⏱ ${new Date(d.timestamp || Date.now()).toLocaleTimeString()}<br>
-        🚨 ${d.alarmActive ? "ALARM ON" : "OK"}<br>
+        🎯 ${d.accuracy ?? "-"}m<br>
+        ⏱ ${new Date(d.timestamp||Date.now()).toLocaleTimeString()}<br>
+        🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
 
         <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
         <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
@@ -231,9 +309,7 @@ function render(){
   });
 }
 
-/* =========================
-   ACTIONS
-========================= */
+/* ================= ACTIONS ================= */
 
 function watch(id){
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
@@ -247,6 +323,10 @@ function follow(id){
   followId = id;
 }
 
+function toggleNav(){
+  navMode = !navMode;
+}
+
 function alarm(id){
   const d = devices[id];
   const newState = !d.alarmActive;
@@ -256,9 +336,7 @@ function alarm(id){
   });
 }
 
-/* =========================
-   INITIAL LOAD
-========================= */
+/* ================= LOAD ================= */
 
 async function load(){
   const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
@@ -267,14 +345,12 @@ async function load(){
 }
 load();
 
-/* =========================
-   WEBSOCKET
-========================= */
+/* ================= WS ================= */
 
 const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
 ws.onmessage = (m) => {
-  try {
+  try{
     const data = JSON.parse(m.data);
 
     if(Array.isArray(data)){
@@ -283,7 +359,7 @@ ws.onmessage = (m) => {
       update(data);
     }
 
-  } catch(e){}
+  }catch(e){}
 };
 
 </script>
