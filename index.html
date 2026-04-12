@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS TESLA WATCH SYSTEM</title>
+<title>GPS WATCH TRACK SYSTEM</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -50,14 +50,14 @@ button {
 .follow { background:#0a84ff; color:white; }
 .watch { background:#ffcc00; color:black; }
 
-/* TESLA GLOW */
+/* glow */
 .leaflet-interactive {
   filter:
     drop-shadow(0 0 6px rgba(58,160,255,0.35))
     drop-shadow(0 0 12px rgba(58,160,255,0.15));
 }
 
-/* ALARM */
+/* alarm pulse */
 @keyframes pulse {
   0% { transform:scale(1); opacity:0.9; }
   100% { transform:scale(2.5); opacity:0; }
@@ -77,7 +77,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 TESLA WATCH TRACK</b>
+  <b>🚗 GPS WATCH SYSTEM</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -96,7 +96,6 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 /* ================= STATE ================= */
 const markers = {};
 const trails = {};
-const trailLines = {};
 const last = {};
 const angles = {};
 const list = [];
@@ -106,6 +105,13 @@ let followMode = false;
 
 /* ================= HELPERS ================= */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
+
+function getColor(name){
+  const n=(name||"").toLowerCase();
+  if(n.includes("oliver")) return "#3aa0ff";
+  if(n.includes("nicole")) return "#ff4d4d";
+  return "#4dffb5";
+}
 
 function bearing(a,b,c,d){
   const toRad=x=>x*Math.PI/180,toDeg=x=>x*180/Math.PI;
@@ -125,21 +131,13 @@ function formatTime(ts){
   return Math.floor(m/60)+"h";
 }
 
-/* ================= COLORS ================= */
-function getColor(name){
-  const n=(name||"").toLowerCase();
-  if(n.includes("oliver")) return "#3aa0ff";
-  if(n.includes("nicole")) return "#ff4d4d";
-  return "#4dffb5";
-}
-
 /* ================= ICON ================= */
 function icon(name, angle, alarm, accuracy, isWatched){
 
-  const color=getColor(name);
-  const letter=(name?.[0]||"?").toUpperCase();
+  const color = getColor(name);
+  const letter = (name?.[0] || "?").toUpperCase();
 
-  const acc=accuracy?Math.max(20,Math.min(accuracy,120)):60;
+  const acc = accuracy ? Math.max(20, Math.min(accuracy, 120)) : 60;
 
   return L.divIcon({
     className:"",
@@ -148,7 +146,6 @@ function icon(name, angle, alarm, accuracy, isWatched){
 
         ${alarm?'<div class="alarm-ring"></div>':''}
 
-        <!-- WATCH HIGHLIGHT -->
         ${isWatched?`
           <div style="
             position:absolute;
@@ -157,12 +154,11 @@ function icon(name, angle, alarm, accuracy, isWatched){
             border-radius:50%;
             top:50%;left:50%;
             transform:translate(-50%,-50%);
-            opacity:0.6;
+            opacity:0.7;
             animation:pulse 1.5s infinite;
           "></div>
         `:''}
 
-        <!-- ACCURACY -->
         <div style="
           position:absolute;
           width:${acc}px;height:${acc}px;
@@ -172,7 +168,6 @@ function icon(name, angle, alarm, accuracy, isWatched){
           transform:translate(-50%,-50%);
         "></div>
 
-        <!-- ARROW -->
         <div style="
           position:absolute;
           top:50%;left:50%;
@@ -181,10 +176,10 @@ function icon(name, angle, alarm, accuracy, isWatched){
           color:${color};
         ">➤</div>
 
-        <!-- LETTER -->
         <div style="
           position:absolute;
-          top:6px;left:50%;
+          top:6px;
+          left:50%;
           transform:translateX(-50%);
           width:18px;height:18px;
           border-radius:50%;
@@ -194,7 +189,9 @@ function icon(name, angle, alarm, accuracy, isWatched){
           display:flex;
           align-items:center;
           justify-content:center;
-        ">${letter}</div>
+        ">
+          ${letter}
+        </div>
 
       </div>
     `,
@@ -206,44 +203,34 @@ function icon(name, angle, alarm, accuracy, isWatched){
 /* ================= UPDATE ================= */
 function update(d){
 
-  const id=d.deviceId;
-  const lat=n(d.lat);
-  const lon=n(d.lon);
+  const id = d.deviceId;
+  const lat = n(d.lat);
+  const lon = n(d.lon);
   if(lat===null||lon===null) return;
 
-  const prev=last[id];
+  const prev = last[id];
 
-  let angle=0;
-  if(prev) angle=bearing(prev.lat,prev.lon,lat,lon);
+  let angle = 0;
+  if(prev) angle = bearing(prev.lat,prev.lon,lat,lon);
 
-  angles[id]=(angles[id]??angle)+(angle-(angles[id]??angle))*0.25;
+  angles[id] = (angles[id] ?? angle) + (angle - (angles[id] ?? angle)) * 0.25;
 
-  last[id]={lat,lon};
+  last[id] = {lat,lon};
 
-  if(!trails[id]) trails[id]=[];
+  if(!trails[id]) trails[id] = [];
   trails[id].push([lat,lon]);
-  if(trails[id].length>80) trails[id].shift();
-
-  if(!trailLines[id]){
-    trailLines[id]=L.polyline([],{
-      color:getColor(d.name),
-      weight:5,
-      opacity:0.2
-    }).addTo(map);
-  }
-
-  trailLines[id].setLatLngs(trails[id]);
+  if(trails[id].length > 60) trails[id].shift();
 
   if(!markers[id]){
-    markers[id]=L.marker([lat,lon],{
-      icon:icon(d.name,angles[id],d.alarmActive,d.accuracy,d.isWatched)
+    markers[id] = L.marker([lat,lon],{
+      icon: icon(d.name, angles[id], d.alarmActive, d.accuracy, d.isWatched)
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name,angles[id],d.alarmActive,d.accuracy,d.isWatched));
+  markers[id].setIcon(icon(d.name, angles[id], d.alarmActive, d.accuracy, d.isWatched));
 
-  const ex=list.find(x=>x.deviceId===id);
+  const ex = list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
 
@@ -274,7 +261,6 @@ function render(){
 
     div.innerHTML=`
       <b>${d.name}</b><br>
-      📡 ${d.status ?? "?"}<br>
       📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
       📡 ${d.accuracy ?? "?"} m<br>
       🔋 ${d.battery ?? "?"}%<br>
@@ -312,20 +298,20 @@ function unwatch(id){
 function toggleFollow(id){
   if(followTargets.has(id)) followTargets.delete(id);
   else followTargets.add(id);
-  followMode=followTargets.size>0;
+  followMode = followTargets.size > 0;
 }
 
 /* ================= LOAD ================= */
 async function load(){
-  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const d=await r.json();
+  const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const d = await r.json();
   d.forEach(update);
 }
 load();
 
 /* ================= WS ================= */
-const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-ws.onmessage=(m)=>{try{update(JSON.parse(m.data));}catch(e){}};
+const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+ws.onmessage = (m)=>{ try{ update(JSON.parse(m.data)); }catch(e){} };
 
 </script>
 </body>
