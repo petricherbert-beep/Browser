@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS TRACKING PRO</title>
+<title>GPS NAVIGATION PRO</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -31,11 +31,6 @@ body {
   border-radius: 14px;
 }
 
-.device {
-  padding: 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-
 button {
   margin: 3px;
   padding: 6px 8px;
@@ -58,7 +53,12 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS TRACKING PRO</b>
+  <b>🧭 GPS NAVIGATION PRO</b><br><br>
+
+  <button onclick="toggleNavMode()" style="background:#00c2ff;color:white;">
+    🧭 Navigation Mode
+  </button>
+
   <hr>
   <div id="list"></div>
 </div>
@@ -67,6 +67,7 @@ button {
 
 <script>
 
+/* MAP */
 const map = L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -80,9 +81,10 @@ const list = [];
 const last = {};
 const angles = {};
 
-let followTargets = new Set();
-let lockedFollowId = null;
-let headingMode = true;
+let followId = null;
+let navigationMode = false;
+
+let smoothAngle = 0;
 
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -103,7 +105,15 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON (Accuracy + Pfeil getrennt) */
+/* SMOOTH ANGLE */
+function smooth(a){
+  let diff = a - smoothAngle;
+  diff = ((diff + 540) % 360) - 180;
+  smoothAngle += diff * 0.12;
+  return smoothAngle;
+}
+
+/* ICON */
 function icon(name, angle, isWatched, accuracy){
 
   const color = getColor(name);
@@ -116,7 +126,7 @@ function icon(name, angle, isWatched, accuracy){
     html:`
       <div style="width:70px;height:70px;position:relative;">
 
-        <!-- 🎯 ACCURACY HALO -->
+        <!-- ACCURACY -->
         <div style="
           position:absolute;
           top:50%;
@@ -127,10 +137,9 @@ function icon(name, angle, isWatched, accuracy){
           border-radius:50%;
           background:rgba(100,150,255,0.12);
           border:1px solid rgba(100,150,255,0.25);
-          pointer-events:none;
         "></div>
 
-        <!-- ⭐ WATCH -->
+        <!-- WATCH -->
         ${isWatched ? `
           <div style="
             position:absolute;
@@ -142,7 +151,7 @@ function icon(name, angle, isWatched, accuracy){
           "></div>
         ` : ''}
 
-        <!-- ➤ MARKER -->
+        <!-- ARROW -->
         <div style="
           position:absolute;
           width:100%;
@@ -150,16 +159,21 @@ function icon(name, angle, isWatched, accuracy){
           display:flex;
           align-items:center;
           justify-content:center;
-          transform: rotate(${angle}deg);
-          font-size:38px;
-          color:${color};
         ">
-          <div style="position:relative;">
+          <div style="
+            transform: rotate(${angle}deg);
+            transition: transform 0.15s linear;
+            font-size:38px;
+            color:${color};
+            display:flex;
+            align-items:center;
+            justify-content:center;
+          ">
             ➤
             <span style="
               position:absolute;
               font-size:12px;
-              font-weight:600;
+              font-weight:700;
               color:white;
             ">
               ${letter}
@@ -183,49 +197,45 @@ function timeAgo(ts){
   return Math.floor(sec/60) + " min";
 }
 
-/* 🚨 ALARM */
-function triggerAlarm(d){
-  const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-  audio.play();
+/* NAV MODE TOGGLE */
+function toggleNavMode(){
+  navigationMode = !navigationMode;
 
-  map.panTo([d.lat, d.lon]);
-
-  fetch("https://gps-server-f9b6.onrender.com/notify", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      token: d.fcmToken,
-      title: "🚨 Alarm",
-      body: `${d.name} hat Alarm ausgelöst`
-    })
-  }).catch(()=>{});
+  if(!navigationMode){
+    const pane = map.getPane("mapPane");
+    if(pane){
+      pane.style.transform = "rotate(0deg)";
+    }
+  }
 }
 
-/* 📷 CAMERA (LOCK + FOLLOW FIX) */
+/* CAMERA */
 function updateCamera(){
 
-  if(lockedFollowId){
-    const p = markers[lockedFollowId]?.getLatLng();
-    if(p){
-      map.setView(p, map.getZoom(), {animate:true});
+  if(!followId) return;
+
+  const pos = markers[followId]?.getLatLng();
+  if(!pos) return;
+
+  const angle = angles[followId] || 0;
+
+  if(navigationMode){
+
+    const a = smooth(angle || 0);
+
+    map.panTo(pos, {animate:true, duration:0.3});
+    map.setZoom(18);
+
+    const pane = map.getPane("mapPane");
+    if(pane){
+      pane.style.transform = `rotate(${-a}deg)`;
+      pane.style.transformOrigin = "center";
     }
+
     return;
   }
 
-  const pts = [...followTargets]
-    .map(id => markers[id]?.getLatLng())
-    .filter(Boolean);
-
-  if(pts.length === 1){
-    map.panTo(pts[0], {animate:true});
-  }
-
-  if(pts.length > 1){
-    map.fitBounds(L.latLngBounds(pts), {
-      padding:[80,80],
-      animate:true
-    });
-  }
+  map.panTo(pos, {animate:true, duration:0.25});
 }
 
 /* UPDATE */
@@ -238,23 +248,25 @@ function update(d){
 
   const prev = last[id];
 
-  let angle = angles[id] || 0;
-
   if(prev && (lat !== prev.lat || lon !== prev.lon)){
-    angle = bearing(prev.lat,prev.lon,lat,lon);
-    angles[id] = angle;
+    const raw = bearing(prev.lat, prev.lon, lat, lon);
+
+    const delta = Math.abs(raw - (angles[id] || 0));
+    if(delta > 1.5){
+      angles[id] = raw;
+    }
   }
 
   last[id] = {lat,lon};
 
   if(!markers[id]){
     markers[id] = L.marker([lat,lon],{
-      icon: icon(d.name, angle, d.isWatched, d.accuracy)
+      icon: icon(d.name, angles[id] || 0, d.isWatched, d.accuracy)
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name, angle, d.isWatched, d.accuracy));
+  markers[id].setIcon(icon(d.name, angles[id] || 0, d.isWatched, d.accuracy));
 
   /* TRACK */
   if(d.isWatched){
@@ -270,7 +282,9 @@ function update(d){
 
   /* ALARM */
   if(d.alarmActive && d.isWatched){
-    triggerAlarm(d);
+    const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    audio.play();
+    map.panTo([lat,lon]);
   }
 
   const ex = list.find(x=>x.deviceId===id);
@@ -297,20 +311,15 @@ function render(){
       <b>${d.name}</b><br>
 
       📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
-
       🚗 Speed: ${speed.toFixed(1)} km/h<br>
-
       🎯 Accuracy: ${d.accuracy ?? "-"} m<br>
-
       🔋 Akku: ${d.battery ?? "-"}%<br>
-
       📡 Status: ${d.status ?? "unknown"}<br>
-
       ⏱️ Zuletzt: ${timeAgo(d.timestamp)}<br><br>
 
       <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
       <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
-      <button class="follow" onclick="toggleFollow('${d.deviceId}')">Follow</button>
+      <button class="follow" onclick="followId='${d.deviceId}'">Follow</button>
     `;
 
     el.appendChild(div);
@@ -324,19 +333,6 @@ function watch(id){
 
 function unwatch(id){
   fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/unwatch",{method:"POST"});
-}
-
-function toggleFollow(id){
-
-  if(lockedFollowId === id){
-    lockedFollowId = null;
-    followTargets.delete(id);
-    return;
-  }
-
-  lockedFollowId = id;
-  followTargets.clear();
-  followTargets.add(id);
 }
 
 /* LOAD */
