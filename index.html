@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS TESLA TRACKING SYSTEM</title>
+<title>GPS TESLA WATCH SYSTEM</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -48,6 +48,7 @@ button {
 .alarm { background:#ff3b30; color:white; }
 .stop { background:#34c759; color:white; }
 .follow { background:#0a84ff; color:white; }
+.watch { background:#ffcc00; color:black; }
 
 /* TESLA GLOW */
 .leaflet-interactive {
@@ -69,7 +70,6 @@ button {
   border-radius:50%;
   transform:translate(-50%,-50%);
   animation:pulse 1s infinite;
-  box-shadow:0 0 20px red;
 }
 </style>
 </head>
@@ -77,7 +77,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 TESLA GPS DISPATCH</b>
+  <b>🚗 TESLA WATCH TRACK</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -99,22 +99,10 @@ const trails = {};
 const trailLines = {};
 const last = {};
 const angles = {};
-const alarmState = {};
 const list = [];
 
 let followTargets = new Set();
 let followMode = false;
-
-/* ================= AUDIO ================= */
-const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
-alarmAudio.loop = true;
-let audioReady = false;
-
-document.addEventListener("click",()=>{
-  if(!audioReady){
-    alarmAudio.play().then(()=>{ alarmAudio.pause(); audioReady=true; });
-  }
-});
 
 /* ================= HELPERS ================= */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
@@ -127,24 +115,17 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-function speak(t){
-  const m=new SpeechSynthesisUtterance(t);
-  m.lang="de-DE";
-  speechSynthesis.cancel();
-  speechSynthesis.speak(m);
-}
-
 function formatTime(ts){
   if(!ts) return "?";
   const d=Date.now()-ts;
   const s=Math.floor(d/1000);
-  if(s<60) return s+"s ago";
+  if(s<60) return s+"s";
   const m=Math.floor(s/60);
-  if(m<60) return m+"m ago";
-  return Math.floor(m/60)+"h ago";
+  if(m<60) return m+"m";
+  return Math.floor(m/60)+"h";
 }
 
-/* ================= TESLA COLORS ================= */
+/* ================= COLORS ================= */
 function getColor(name){
   const n=(name||"").toLowerCase();
   if(n.includes("oliver")) return "#3aa0ff";
@@ -152,35 +133,11 @@ function getColor(name){
   return "#4dffb5";
 }
 
-/* ================= SPLINE (TESLA STYLE) ================= */
-function spline(points){
-  if(points.length<3) return points;
-
-  const out=[];
-  for(let i=0;i<points.length-2;i++){
-    const p0=points[i];
-    const p1=points[i+1];
-    const p2=points[i+2];
-
-    for(let t=0;t<=1;t+=0.25){
-      const lat=0.5*((2*p1[0])+(-p0[0]+p2[0])*t);
-      const lon=0.5*((2*p1[1])+(-p0[1]+p2[1])*t);
-      out.push([lat,lon]);
-    }
-  }
-  return out;
-}
-
 /* ================= ICON ================= */
-function icon(name, angle, alarm, accuracy){
+function icon(name, angle, alarm, accuracy, isWatched){
 
-  const n=(name||"").toLowerCase();
   const color=getColor(name);
-
-  let letter="?";
-  if(n.includes("oliver")) letter="O";
-  else if(n.includes("nicole")) letter="N";
-  else letter=(name?.[0]||"?").toUpperCase();
+  const letter=(name?.[0]||"?").toUpperCase();
 
   const acc=accuracy?Math.max(20,Math.min(accuracy,120)):60;
 
@@ -191,44 +148,53 @@ function icon(name, angle, alarm, accuracy){
 
         ${alarm?'<div class="alarm-ring"></div>':''}
 
+        <!-- WATCH HIGHLIGHT -->
+        ${isWatched?`
+          <div style="
+            position:absolute;
+            width:90px;height:90px;
+            border:2px solid gold;
+            border-radius:50%;
+            top:50%;left:50%;
+            transform:translate(-50%,-50%);
+            opacity:0.6;
+            animation:pulse 1.5s infinite;
+          "></div>
+        `:''}
+
+        <!-- ACCURACY -->
         <div style="
           position:absolute;
-          width:${acc}px;
-          height:${acc}px;
+          width:${acc}px;height:${acc}px;
           border:2px solid rgba(255,255,255,0.2);
           border-radius:50%;
-          top:50%;
-          left:50%;
+          top:50%;left:50%;
           transform:translate(-50%,-50%);
         "></div>
 
+        <!-- ARROW -->
         <div style="
           position:absolute;
-          top:50%;
-          left:50%;
+          top:50%;left:50%;
           transform:translate(-50%,-50%) rotate(${angle}deg);
           font-size:38px;
           color:${color};
         ">➤</div>
 
+        <!-- LETTER -->
         <div style="
           position:absolute;
-          top:50%;
-          left:50%;
-          transform:translate(-50%,-50%);
-          width:18px;
-          height:18px;
+          top:6px;left:50%;
+          transform:translateX(-50%);
+          width:18px;height:18px;
           border-radius:50%;
-          background:rgba(0,0,0,0.6);
+          background:rgba(0,0,0,0.65);
+          color:white;
+          font-size:11px;
           display:flex;
           align-items:center;
           justify-content:center;
-          color:white;
-          font-size:12px;
-          font-weight:700;
-        ">
-          ${letter}
-        </div>
+        ">${letter}</div>
 
       </div>
     `,
@@ -240,8 +206,6 @@ function icon(name, angle, alarm, accuracy){
 /* ================= UPDATE ================= */
 function update(d){
 
-  if(!d?.deviceId) return;
-
   const id=d.deviceId;
   const lat=n(d.lat);
   const lon=n(d.lon);
@@ -252,51 +216,36 @@ function update(d){
   let angle=0;
   if(prev) angle=bearing(prev.lat,prev.lon,lat,lon);
 
-  const smoothed=(angles[id]??angle)+(angle-(angles[id]??angle))*0.25;
-  angles[id]=smoothed;
+  angles[id]=(angles[id]??angle)+(angle-(angles[id]??angle))*0.25;
 
   last[id]={lat,lon};
 
   if(!trails[id]) trails[id]=[];
   trails[id].push([lat,lon]);
-  if(trails[id].length>100) trails[id].shift();
+  if(trails[id].length>80) trails[id].shift();
 
   if(!trailLines[id]){
     trailLines[id]=L.polyline([],{
       color:getColor(d.name),
-      weight:6,
-      opacity:0.15
+      weight:5,
+      opacity:0.2
     }).addTo(map);
   }
 
-  const smooth=spline(trails[id]);
-  trailLines[id].setLatLngs(smooth);
+  trailLines[id].setLatLngs(trails[id]);
 
   if(!markers[id]){
     markers[id]=L.marker([lat,lon],{
-      icon:icon(d.name,smoothed,d.alarmActive,d.accuracy)
+      icon:icon(d.name,angles[id],d.alarmActive,d.accuracy,d.isWatched)
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name,smoothed,d.alarmActive,d.accuracy));
+  markers[id].setIcon(icon(d.name,angles[id],d.alarmActive,d.accuracy,d.isWatched));
 
   const ex=list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
-
-  /* ALARM */
-  if(d.alarmActive && !alarmState[id]){
-    alarmState[id]=true;
-    if(audioReady) alarmAudio.play();
-    speak("Alarm bei "+d.name);
-    map.flyTo([lat,lon],18);
-  }
-
-  if(!d.alarmActive && alarmState[id]){
-    alarmState[id]=false;
-    alarmAudio.pause();
-  }
 
   /* FOLLOW */
   if(followTargets.has(id)){
@@ -325,16 +274,18 @@ function render(){
 
     div.innerHTML=`
       <b>${d.name}</b><br>
-      🚗 ${d.speed ?? 0} km/h<br>
       📡 ${d.status ?? "?"}<br>
       📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
       📡 ${d.accuracy ?? "?"} m<br>
       🔋 ${d.battery ?? "?"}%<br>
-      ⏱ ${formatTime(d.timestamp)}<br><br>
+      ⏱ ${formatTime(d.timestamp)}<br>
+      👁 Watched: ${d.isWatched ? "YES" : "NO"}<br><br>
 
       <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
       <button class="stop" onclick="stop('${d.deviceId}')">Stop</button>
       <button class="follow" onclick="toggleFollow('${d.deviceId}')">Follow</button>
+      <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
+      <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
     `;
 
     el.appendChild(div);
@@ -348,6 +299,14 @@ function alarm(id){
 
 function stop(id){
   fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/alarm?active=false",{method:"POST"});
+}
+
+function watch(id){
+  fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/watch",{method:"POST"});
+}
+
+function unwatch(id){
+  fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/unwatch",{method:"POST"});
 }
 
 function toggleFollow(id){
