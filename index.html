@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS WATCH FIXED UI</title>
+<title>GPS WATCH + FOLLOW SYSTEM</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -45,8 +45,6 @@ button {
   cursor: pointer;
 }
 
-.alarm { background:#ff3b30; color:white; }
-.stop { background:#34c759; color:white; }
 .follow { background:#0a84ff; color:white; }
 .watch { background:#ffcc00; color:black; }
 
@@ -60,7 +58,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS WATCH SYSTEM</b>
+  <b>🚗 WATCH + FOLLOW SYSTEM</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -82,6 +80,9 @@ const list = [];
 const last = {};
 const angles = {};
 
+let followTargets = new Set();
+let followMode = false;
+
 /* ================= HELPERS ================= */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -101,7 +102,7 @@ function bearing(a,b,c,d){
 }
 
 /* ================= ICON ================= */
-function icon(name, angle, alarm, accuracy, isWatched){
+function icon(name, angle, accuracy, isWatched){
 
   const color = getColor(name);
   const letter = (name?.[0] || "?").toUpperCase();
@@ -109,7 +110,7 @@ function icon(name, angle, alarm, accuracy, isWatched){
 
   return L.divIcon({
     className:"",
-    html: `
+    html:`
       <div style="
         width:70px;
         height:70px;
@@ -119,7 +120,6 @@ function icon(name, angle, alarm, accuracy, isWatched){
         justify-content:center;
       ">
 
-        <!-- WATCH RING (FIXED CENTER) -->
         ${isWatched ? `
           <div style="
             position:absolute;
@@ -127,12 +127,11 @@ function icon(name, angle, alarm, accuracy, isWatched){
             height:86px;
             border:2px solid gold;
             border-radius:50%;
-            animation:pulse 1.6s infinite;
+            animation:pulse 1.5s infinite;
             pointer-events:none;
           "></div>
         ` : ''}
 
-        <!-- ACCURACY -->
         <div style="
           position:absolute;
           width:${acc}px;
@@ -142,14 +141,12 @@ function icon(name, angle, alarm, accuracy, isWatched){
           pointer-events:none;
         "></div>
 
-        <!-- ARROW -->
         <div style="
           font-size:38px;
           color:${color};
           transform: rotate(${angle}deg);
         ">➤</div>
 
-        <!-- LETTER -->
         <div style="
           position:absolute;
           top:6px;
@@ -186,21 +183,43 @@ function update(d){
   let angle = 0;
   if(prev) angle = bearing(prev.lat,prev.lon,lat,lon);
 
-  angles[id] = angle;
   last[id] = {lat,lon};
+  angles[id] = angle;
 
   if(!markers[id]){
     markers[id] = L.marker([lat,lon],{
-      icon: icon(d.name, angle, d.alarmActive, d.accuracy, d.isWatched)
+      icon: icon(d.name, angle, d.accuracy, d.isWatched)
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name, angle, d.alarmActive, d.accuracy, d.isWatched));
+  markers[id].setIcon(icon(d.name, angle, d.accuracy, d.isWatched));
 
   const ex = list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
+
+  /* ================= FOLLOW MODE ================= */
+
+  if(followTargets.has(id)){
+    map.panTo([lat,lon]);
+  }
+
+  if(followMode){
+    const pts = [...followTargets]
+      .map(i => markers[i]?.getLatLng())
+      .filter(Boolean);
+
+    if(pts.length === 1){
+      map.panTo(pts[0]);
+    }
+
+    if(pts.length > 1){
+      map.fitBounds(L.latLngBounds(pts), {
+        padding: [60,60]
+      });
+    }
+  }
 
   render();
 }
@@ -208,23 +227,22 @@ function update(d){
 /* ================= UI ================= */
 function render(){
 
-  const el=document.getElementById("list");
-  el.innerHTML="";
+  const el = document.getElementById("list");
+  el.innerHTML = "";
 
-  list.forEach(d=>{
+  list.forEach(d => {
 
-    const div=document.createElement("div");
-    div.className="device";
+    const div = document.createElement("div");
+    div.className = "device";
 
-    div.innerHTML=`
+    div.innerHTML = `
       <b>${d.name}</b><br>
       📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
-      📡 ${d.accuracy ?? "?"} m<br>
-      🔋 ${d.battery ?? "?"}%<br>
       👁 Watched: ${d.isWatched ? "YES" : "NO"}<br><br>
 
       <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
       <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
+      <button class="follow" onclick="toggleFollow('${d.deviceId}')">Follow</button>
     `;
 
     el.appendChild(div);
@@ -240,6 +258,17 @@ function unwatch(id){
   fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/unwatch",{method:"POST"});
 }
 
+function toggleFollow(id){
+
+  if(followTargets.has(id)){
+    followTargets.delete(id);
+  } else {
+    followTargets.add(id);
+  }
+
+  followMode = followTargets.size > 0;
+}
+
 /* ================= LOAD ================= */
 async function load(){
   const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
@@ -253,5 +282,6 @@ const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 ws.onmessage = (m)=>{ try{ update(JSON.parse(m.data)); }catch(e){} };
 
 </script>
+
 </body>
 </html>
