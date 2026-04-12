@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS TRACKING + ALARM + NAV</title>
+<title>GPS VECTOR TRACKING</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -48,7 +48,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🧭 GPS TRACKING SYSTEM</b>
+  <b>🧭 GPS VECTOR NAV</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -80,9 +80,9 @@ const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 /* COLOR */
 function getColor(name){
   const n=(name||"").toLowerCase();
-  if(n.includes("oliver")) return "#3aa0ff";
-  if(n.includes("nicole")) return "#ff4d4d";
-  return "#4dffb5";
+  if(n.includes("oliver")) return "#3aa0ff"; // blue
+  if(n.includes("nicole")) return "#ff4d4d"; // red
+  return "#4dffb5"; // green
 }
 
 /* BEARING */
@@ -94,11 +94,12 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON */
+/* VECTOR ICON */
 function icon(name, isWatched, accuracy){
 
   const color = getColor(name);
   const letter = (name?.[0] || "?").toUpperCase();
+
   const acc = accuracy ? Math.min(Math.max(accuracy*2,25),140) : 60;
 
   return L.divIcon({
@@ -117,42 +118,50 @@ function icon(name, isWatched, accuracy){
           border:1px solid rgba(100,150,255,0.25);
         "></div>
 
-        ${isWatched ? `
-          <div style="
-            position:absolute;
-            width:86px;height:86px;
-            border:2px solid gold;
-            border-radius:50%;
-            animation:pulse 1.5s infinite;
-          "></div>
-        ` : ''}
-
+        <!-- OUTER DOT -->
         <div style="
+          position:absolute;
+          width:16px;
+          height:16px;
+          border-radius:50%;
+          background:${color};
+          top:50%;
+          left:50%;
+          transform:translate(-50%,-50%);
+        "></div>
+
+        <!-- NORTH VECTOR ARROW -->
+        <div style="
+          position:absolute;
+          top:0;
+          left:0;
           width:100%;
           height:100%;
           display:flex;
           align-items:center;
           justify-content:center;
+          font-size:34px;
+          color:${color};
         ">
-          <div style="position:relative;font-size:38px;color:${color};">
-            ➤
-            <span style="
-              position:absolute;
-              font-size:12px;
-              font-weight:700;
-              color:white;
-              top:50%;left:50%;
-              transform:translate(-50%,-50%);
-            ">
-              ${letter}
-            </span>
-          </div>
+          ▲
+        </div>
+
+        <!-- CENTER LETTER -->
+        <div style="
+          position:absolute;
+          top:50%;
+          left:50%;
+          transform:translate(-50%,-50%);
+          font-size:11px;
+          font-weight:800;
+          color:white;
+          z-index:5;
+        ">
+          ${letter}
         </div>
 
       </div>
-    `,
-    iconSize:[70,70],
-    iconAnchor:[35,35]
+    `
   });
 }
 
@@ -178,7 +187,7 @@ function update(d){
 
   let angle = angles[id];
 
-  /* heading nur bei Bewegung + speed */
+  /* heading only when movement */
   if(prev){
 
     const moved =
@@ -221,22 +230,12 @@ function update(d){
     tracks[id].addLatLng([lat,lon]);
   }
 
-  /* 🚨 ALARM */
+  /* ALARM */
   alarmState[id] = d.alarmActive;
 
   if(d.alarmActive && d.isWatched){
     const audio=new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
     audio.play();
-
-    fetch("https://gps-server-f9b6.onrender.com/notify",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        token:d.fcmToken,
-        title:"🚨 Alarm",
-        body:`${d.name} hat Alarm ausgelöst`
-      })
-    }).catch(()=>{});
   }
 
   const ex=list.find(x=>x.deviceId===id);
@@ -245,19 +244,6 @@ function update(d){
 
   updateCamera();
   render();
-}
-
-/* TOGGLE ALARM */
-function toggleAlarm(id){
-  const state = !alarmState[id];
-
-  alarmState[id] = state;
-
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm`,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ alarmActive: state })
-  });
 }
 
 /* UI */
@@ -278,18 +264,9 @@ function render(){
         🎯 Accuracy: ${d.accuracy??"-"} m<br>
         🔋 Akku: ${d.battery??"-"}%<br>
         📡 Status: ${d.status??"unknown"}<br>
-        ⏱️ Update: ${new Date(d.timestamp).toLocaleTimeString()}<br>
-
-        <div style="color:${d.alarmActive ? '#ff3b30' : '#888'};">
-          ${d.alarmActive ? "🚨 ALARM AKTIV" : "kein Alarm"}
-        </div><br>
 
         <button class="follow" onclick="followId='${d.deviceId}'">Follow</button>
         <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
-        <button onclick="toggleAlarm('${d.deviceId}')"
-          style="background:${d.alarmActive ? '#ff3b30' : '#444'}; color:white;">
-          🚨 Alarm
-        </button>
       </div>
     `;
   });
