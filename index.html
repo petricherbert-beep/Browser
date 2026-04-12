@@ -2,9 +2,8 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS PRO TRACKING - STABLE</title>
+<title>GPS PRO TRACKING UI</title>
 
-<!-- ✅ SAFE LEAFLET CDN (FIXED MIME ISSUE) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -51,30 +50,6 @@ button {
 .stop { background:#34c759; color:white; }
 .follow { background:#0a84ff; color:white; }
 
-.glass {
-  backdrop-filter: blur(14px);
-  background: rgba(28,28,30,0.65);
-  border-radius: 16px;
-  padding: 10px;
-  color: white;
-  width: 230px;
-}
-
-.bar {
-  height: 6px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.bar > div {
-  height: 100%;
-  transition: width 0.3s;
-}
-
-.speed { background:#0a84ff; }
-.battery { background:#30d158; }
-
 .pulse {
   position:absolute;
   width:60px;
@@ -104,8 +79,6 @@ button {
 
 <script>
 
-console.log("SCRIPT LOADED");
-
 /* ================= MAP ================= */
 const map = L.map("map").setView([47.09,15.42],13);
 
@@ -118,16 +91,16 @@ const markers = {};
 const trails = {};
 const last = {};
 const list = [];
+const alarmState = {};
 
 let followId = null;
 let autoFollow = false;
-const alarmState = {};
 
 /* ================= AUDIO ================= */
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
-
 let audioReady = false;
+
 document.addEventListener("click",()=>{
   if(!audioReady){
     alarmAudio.play().then(()=>{
@@ -163,16 +136,30 @@ function speak(t){
   speechSynthesis.speak(m);
 }
 
-/* ================= ICON ================= */
-function icon(name,angle,alarm){
-  const color = alarm ? "#ff3b30" : "#2ecc71";
+/* ================= ICON (FIXED COLORS) ================= */
+function icon(name, angle, alarm){
+
+  const n = (name || "").toLowerCase();
+
+  const color =
+    n.includes("oliver") ? "#0a84ff" :   // 🔵
+    n.includes("nicole") ? "#ff3b30" :   // 🔴
+    "#2ecc71";                           // 🟢
 
   return L.divIcon({
     className:"",
     html:`
       <div style="position:relative;width:60px;height:60px;">
-        ${alarm?'<div class="pulse"></div>':''}
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${angle}deg);font-size:42px;color:${color};">
+        ${alarm ? '<div class="pulse"></div>' : ''}
+        <div style="
+          position:absolute;
+          top:50%;
+          left:50%;
+          transform:translate(-50%,-50%) rotate(${angle}deg);
+          font-size:42px;
+          color:${color};
+          text-shadow:0 0 6px rgba(0,0,0,0.6);
+        ">
           ➤
         </div>
       </div>
@@ -317,6 +304,5 @@ ws.onmessage=(m)=>{
 };
 
 </script>
-
 </body>
 </html>
