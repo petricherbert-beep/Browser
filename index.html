@@ -2,10 +2,11 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS PRO TRACKING UI</title>
+<title>GPS PRO TRACKING - STABLE</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!-- ✅ SAFE LEAFLET CDN (FIXED MIME ISSUE) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
 body {
@@ -21,13 +22,13 @@ body {
   top: 12px;
   left: 12px;
   z-index: 9999;
-  width: 330px;
+  width: 320px;
   max-height: 85vh;
   overflow: auto;
   background: rgba(20,20,20,0.85);
   backdrop-filter: blur(14px);
   color: white;
-  padding: 14px;
+  padding: 12px;
   border-radius: 14px;
 }
 
@@ -37,32 +38,26 @@ body {
   cursor: pointer;
 }
 
-.device:hover {
-  background: rgba(255,255,255,0.06);
-}
-
 button {
   margin: 3px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border: none;
   border-radius: 8px;
-  cursor: pointer;
   font-size: 12px;
+  cursor: pointer;
 }
 
-.alarm-on { background:#ff3b30; color:white; }
-.alarm-off { background:#34c759; color:white; }
+.alarm { background:#ff3b30; color:white; }
+.stop { background:#34c759; color:white; }
+.follow { background:#0a84ff; color:white; }
 
-.glass-popup {
+.glass {
   backdrop-filter: blur(14px);
   background: rgba(28,28,30,0.65);
-  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
-  overflow: hidden;
-  width: 230px;
+  padding: 10px;
   color: white;
-  font-family: system-ui;
-  box-shadow: 0 12px 35px rgba(0,0,0,0.45);
+  width: 230px;
 }
 
 .bar {
@@ -70,32 +65,29 @@ button {
   background: rgba(255,255,255,0.08);
   border-radius: 10px;
   overflow: hidden;
-  margin-top: 4px;
 }
 
 .bar > div {
   height: 100%;
-  transition: width 0.4s ease;
+  transition: width 0.3s;
 }
 
-.speed-bar { background:#0a84ff; }
+.speed { background:#0a84ff; }
+.battery { background:#30d158; }
 
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 0.9; }
-  70% { transform: scale(1.8); opacity: 0; }
-  100% { transform: scale(1.8); opacity: 0; }
-}
-
-.pulse-ring {
+.pulse {
   position:absolute;
   width:60px;
   height:60px;
   border:3px solid red;
   border-radius:50%;
-  top:50%;
-  left:50%;
   transform:translate(-50%,-50%);
-  animation: pulse 1.2s infinite;
+  animation:pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform:scale(1); opacity:0.9; }
+  100% { transform:scale(2); opacity:0; }
 }
 </style>
 </head>
@@ -103,7 +95,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🚗 GPS PRO TRACKING UI</b>
+  <b>🚗 GPS PRO TRACKING</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -112,7 +104,10 @@ button {
 
 <script>
 
-const map = L.map("map").setView([47.09, 15.42], 13);
+console.log("SCRIPT LOADED");
+
+/* ================= MAP ================= */
+const map = L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution:"© OpenStreetMap"
@@ -120,25 +115,24 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 /* ================= STATE ================= */
 const markers = {};
-const lastRaw = {};
-const deviceList = [];
 const trails = {};
+const last = {};
+const list = [];
+
+let followId = null;
+let autoFollow = false;
 const alarmState = {};
 
-let followDeviceId = null;
-let followMode = false;
-let autoFollow = false;
-
 /* ================= AUDIO ================= */
-let alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
-let audioUnlocked = false;
 
-document.addEventListener("click", () => {
-  if(!audioUnlocked){
+let audioReady = false;
+document.addEventListener("click",()=>{
+  if(!audioReady){
     alarmAudio.play().then(()=>{
       alarmAudio.pause();
-      audioUnlocked = true;
+      audioReady = true;
     }).catch(()=>{});
   }
 });
@@ -146,47 +140,40 @@ document.addEventListener("click", () => {
 /* ================= HELPERS ================= */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
-function distance(lat1,lon1,lat2,lon2){
-  const R=6371000,toRad=d=>d*Math.PI/180;
-  const dLat=toRad(lat2-lat1);
-  const dLon=toRad(lon2-lon1);
-  const a=Math.sin(dLat/2)**2+
-    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
-    Math.sin(dLon/2)**2;
-  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+function distance(a,b,c,d){
+  const R=6371000,toRad=x=>x*Math.PI/180;
+  const d1=toRad(c-a),d2=toRad(d-b);
+  const x=Math.sin(d1/2)**2+
+    Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(d2/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 
-function bearing(lat1,lon1,lat2,lon2){
-  const toRad=d=>d*Math.PI/180,toDeg=r=>r*180/Math.PI;
-  const dLon=toRad(lon2-lon1);
-  const y=Math.sin(dLon)*Math.cos(toRad(lat2));
-  const x=Math.cos(toRad(lat1))*Math.sin(toRad(lat2))-
-    Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLon);
+function bearing(a,b,c,d){
+  const toRad=x=>x*Math.PI/180,toDeg=x=>x*180/Math.PI;
+  const y=Math.sin(toRad(d-b))*Math.cos(toRad(c));
+  const x=Math.cos(toRad(a))*Math.sin(toRad(c))-
+    Math.sin(toRad(a))*Math.cos(toRad(c))*Math.cos(toRad(d-b));
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-function speak(text){
-  const msg=new SpeechSynthesisUtterance(text);
-  msg.lang="de-DE";
+function speak(t){
+  const m=new SpeechSynthesisUtterance(t);
+  m.lang="de-DE";
   speechSynthesis.cancel();
-  speechSynthesis.speak(msg);
+  speechSynthesis.speak(m);
 }
 
 /* ================= ICON ================= */
 function icon(name,angle,alarm){
   const color = alarm ? "#ff3b30" : "#2ecc71";
-  const letter = name?.[0]?.toUpperCase() || "?";
 
   return L.divIcon({
     className:"",
     html:`
       <div style="position:relative;width:60px;height:60px;">
-        ${alarm?'<div class="pulse-ring"></div>':''}
+        ${alarm?'<div class="pulse"></div>':''}
         <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${angle}deg);font-size:42px;color:${color};">
           ➤
-          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-${angle}deg);color:white;font-size:13px;">
-            ${letter}
-          </div>
         </div>
       </div>
     `,
@@ -198,26 +185,29 @@ function icon(name,angle,alarm){
 /* ================= UPDATE ================= */
 function update(d){
 
+  if(!d?.deviceId) return;
+
   const id=d.deviceId;
   const lat=n(d.lat);
   const lon=n(d.lon);
-  if(!lat||!lon)return;
 
-  const prev=lastRaw[id];
+  if(lat===null || lon===null) return;
+
+  const prev=last[id];
 
   if(prev){
     const dist=distance(prev.lat,prev.lon,lat,lon);
-    if(dist<5)return;
+    if(dist<3) return;
   }
 
   let angle=0;
   if(prev) angle=bearing(prev.lat,prev.lon,lat,lon);
 
-  lastRaw[id]={lat,lon};
+  last[id]={lat,lon};
 
   if(!trails[id]) trails[id]=[];
   trails[id].push([lat,lon]);
-  if(trails[id].length>50) trails[id].shift();
+  if(trails[id].length>60) trails[id].shift();
 
   if(!markers[id]){
     markers[id]=L.marker([lat,lon],{
@@ -234,32 +224,31 @@ function update(d){
   markers[id].setIcon(icon(d.name,angle,d.alarmActive));
   markers[id].trail.setLatLngs(trails[id]);
 
-  const ex=deviceList.find(x=>x.deviceId===id);
-  if(!ex) deviceList.push(d);
+  const ex=list.find(x=>x.deviceId===id);
+  if(!ex) list.push(d);
   else Object.assign(ex,d);
 
   /* ALARM */
   if(d.alarmActive && !alarmState[id]){
     alarmState[id]=true;
-    if(audioUnlocked){ alarmAudio.play(); }
-    speak(`Alarm bei ${d.name}`);
+    if(audioReady) alarmAudio.play();
+    speak("Alarm bei "+d.name);
     map.flyTo([lat,lon],18);
   }
 
   if(!d.alarmActive && alarmState[id]){
     alarmState[id]=false;
     alarmAudio.pause();
-    speak(`Alarm beendet bei ${d.name}`);
+    speak("Alarm beendet bei "+d.name);
   }
 
   /* FOLLOW */
-  if(followMode && followDeviceId===id){
-    map.panTo([lat,lon],{animate:true,duration:0.5});
+  if(followId===id){
+    map.panTo([lat,lon]);
   }
 
-  /* AUTO FOLLOW */
-  if(autoFollow && followDeviceId===id && d.speed>1){
-    map.panTo([lat,lon],{animate:true,duration:0.5});
+  if(autoFollow && followId===id && d.speed>1){
+    map.panTo([lat,lon]);
   }
 
   render();
@@ -267,10 +256,11 @@ function update(d){
 
 /* ================= RENDER ================= */
 function render(){
+
   const el=document.getElementById("list");
   el.innerHTML="";
 
-  deviceList.forEach(d=>{
+  list.forEach(d=>{
 
     const div=document.createElement("div");
     div.className="device";
@@ -278,48 +268,44 @@ function render(){
     div.innerHTML=`
       <b>${d.name}</b><br>
       🚗 ${d.speed} km/h<br>
-      📡 ${d.accuracy??"?"} m<br>
       🔋 ${d.battery}%<br><br>
 
-      <button class="alarm-on" onclick="alarmOn('${d.deviceId}')">🚨 Alarm</button>
-      <button class="alarm-off" onclick="alarmOff('${d.deviceId}')">🛑 Stop</button>
-      <button onclick="toggleFollow('${d.deviceId}')">👁 Follow</button>
-      <button onclick="toggleAutoFollow()">🎯 Auto</button>
+      <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
+      <button class="stop" onclick="stop('${d.deviceId}')">Stop</button>
+      <button class="follow" onclick="follow('${d.deviceId}')">Follow</button>
+      <button onclick="auto()">Auto</button>
     `;
-
-    div.onclick=(e)=>{
-      if(e.target.tagName!=="BUTTON"){
-        map.setView([d.lat,d.lon],17);
-      }
-    };
 
     el.appendChild(div);
   });
 }
 
-/* ================= CONTROLS ================= */
-function alarmOn(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=true`,{method:"POST"});
+/* ================= ACTIONS ================= */
+function alarm(id){
+  fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/alarm?active=true",{method:"POST"});
 }
 
-function alarmOff(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=false`,{method:"POST"});
+function stop(id){
+  fetch("https://gps-server-f9b6.onrender.com/devices/"+id+"/alarm?active=false",{method:"POST"});
 }
 
-function toggleFollow(id){
-  followDeviceId=id;
-  followMode=true;
+function follow(id){
+  followId=id;
 }
 
-function toggleAutoFollow(){
+function auto(){
   autoFollow=!autoFollow;
 }
 
 /* ================= LOAD ================= */
 async function load(){
-  const res=await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const data=await res.json();
-  data.forEach(update);
+  try{
+    const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+    const d=await r.json();
+    if(Array.isArray(d)) d.forEach(update);
+  }catch(e){
+    console.error(e);
+  }
 }
 load();
 
@@ -331,5 +317,6 @@ ws.onmessage=(m)=>{
 };
 
 </script>
+
 </body>
 </html>
