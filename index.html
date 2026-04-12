@@ -2,53 +2,45 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS NAV PRO (FIXED ROTATION)</title>
+<title>GPS NAVIGATION STABLE</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<!-- 🧭 ROTATION PLUGIN -->
 <script src="https://unpkg.com/leaflet-rotatedmarker/leaflet.rotatedMarker.js"></script>
 
 <style>
-body {
-  margin: 0;
-  font-family: system-ui;
-  background: #0b0f14;
-}
-
-#map { height: 100vh; }
+body { margin:0; font-family:system-ui; background:#0b0f14; }
+#map { height:100vh; }
 
 #panel {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 9999;
-  width: 380px;
-  max-height: 85vh;
-  overflow: auto;
-  background: rgba(20,20,20,0.85);
-  backdrop-filter: blur(14px);
-  color: white;
-  padding: 12px;
-  border-radius: 14px;
+  position:absolute;
+  top:12px; left:12px;
+  width:380px;
+  max-height:85vh;
+  overflow:auto;
+  background:rgba(20,20,20,0.85);
+  backdrop-filter:blur(14px);
+  color:white;
+  padding:12px;
+  border-radius:14px;
+  z-index:9999;
 }
 
 button {
-  margin: 3px;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
+  margin:3px;
+  padding:6px 8px;
+  border:none;
+  border-radius:8px;
+  font-size:12px;
+  cursor:pointer;
 }
 
 .follow { background:#0a84ff; color:white; }
 .watch { background:#ffcc00; color:black; }
 
 @keyframes pulse {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(2.2); opacity: 0; }
+  0% { transform:scale(1); opacity:0.8; }
+  100% { transform:scale(2.2); opacity:0; }
 }
 </style>
 </head>
@@ -56,13 +48,7 @@ button {
 <body>
 
 <div id="panel">
-  <b>🧭 GPS NAV PRO</b>
-  <hr>
-
-  <button onclick="toggleNavMode()" style="background:#00c2ff;color:white;">
-    🧭 Navigation Mode
-  </button>
-
+  <b>🧭 GPS NAV STABLE</b>
   <hr>
   <div id="list"></div>
 </div>
@@ -86,10 +72,8 @@ const last = {};
 const angles = {};
 
 let followId = null;
-let navigationMode = false;
 
-let smoothAngle = 0;
-
+/* HELPERS */
 const n = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
 /* COLOR */
@@ -109,13 +93,13 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON (NO ROTATION HERE!) */
+/* ICON */
 function icon(name, isWatched, accuracy){
 
   const color = getColor(name);
   const letter = (name?.[0] || "?").toUpperCase();
 
-  const acc = accuracy ? Math.min(Math.max(accuracy * 2, 25), 140) : 60;
+  const acc = accuracy ? Math.min(Math.max(accuracy*2,25),140) : 60;
 
   return L.divIcon({
     className:"",
@@ -135,19 +119,16 @@ function icon(name, isWatched, accuracy){
           border:1px solid rgba(100,150,255,0.25);
         "></div>
 
-        <!-- WATCH -->
         ${isWatched ? `
           <div style="
             position:absolute;
-            width:86px;
-            height:86px;
+            width:86px;height:86px;
             border:2px solid gold;
             border-radius:50%;
             animation:pulse 1.5s infinite;
           "></div>
         ` : ''}
 
-        <!-- ARROW -->
         <div style="
           width:100%;
           height:100%;
@@ -178,51 +159,14 @@ function icon(name, isWatched, accuracy){
   });
 }
 
-/* NAV MODE */
-function toggleNavMode(){
-  navigationMode = !navigationMode;
-
-  if(!navigationMode){
-    const pane = map.getPane("mapPane");
-    if(pane) pane.style.transform = "rotate(0deg)";
-  }
-}
-
 /* CAMERA */
 function updateCamera(){
-
   if(!followId) return;
 
   const pos = markers[followId]?.getLatLng();
   if(!pos) return;
 
-  const angle = angles[followId] || 0;
-
-  if(navigationMode){
-
-    const a = smoothAngleFn(angle || 0);
-
-    map.panTo(pos, {animate:true, duration:0.3});
-    map.setZoom(18);
-
-    const pane = map.getPane("mapPane");
-    if(pane){
-      pane.style.transform = `rotate(${-a}deg)`;
-      pane.style.transformOrigin = "center";
-    }
-
-    return;
-  }
-
-  map.panTo(pos, {animate:true, duration:0.25});
-}
-
-/* SMOOTH */
-function smoothAngleFn(a){
-  let diff = a - smoothAngle;
-  diff = ((diff + 540) % 360) - 180;
-  smoothAngle += diff * 0.12;
-  return smoothAngle;
+  map.panTo(pos,{animate:true,duration:0.25});
 }
 
 /* UPDATE */
@@ -235,43 +179,68 @@ function update(d){
 
   const prev = last[id];
 
-  if(prev && (lat !== prev.lat || lon !== prev.lon)){
-    const raw = bearing(prev.lat, prev.lon, lat, lon);
-    const delta = Math.abs(raw - (angles[id] || 0));
-    if(delta > 1.5) angles[id] = raw;
+  let angle = angles[id];
+
+  /* 🧠 FIX: Heading nur bei echter Bewegung */
+  if(prev){
+
+    const moved =
+      Math.abs(lat - prev.lat) > 0.00001 ||
+      Math.abs(lon - prev.lon) > 0.00001;
+
+    const speedOk = (d.speed ?? 0) > 1;
+
+    if(moved && speedOk){
+      angle = bearing(prev.lat,prev.lon,lat,lon);
+      angles[id] = angle;
+    }
   }
 
   last[id] = {lat,lon};
 
+  /* MARKER */
   if(!markers[id]){
 
     markers[id] = L.marker([lat,lon],{
       icon: icon(d.name, d.isWatched, d.accuracy),
-      rotationAngle: angles[id] || 0,
+      rotationAngle: angle || 0,
       rotationOrigin: "center"
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-
-  // 🧭 FIXED ROTATION (REAL)
-  markers[id].setRotationAngle(angles[id] || 0);
-
+  markers[id].setRotationAngle(angle || 0);
   markers[id].setIcon(icon(d.name, d.isWatched, d.accuracy));
 
   /* TRACK */
   if(d.isWatched){
     if(!tracks[id]){
-      tracks[id] = L.polyline([], {
-        color: getColor(d.name),
-        weight: 4,
-        opacity: 0.85
+      tracks[id]=L.polyline([],{
+        color:getColor(d.name),
+        weight:4,
+        opacity:0.85
       }).addTo(map);
     }
     tracks[id].addLatLng([lat,lon]);
   }
 
-  const ex = list.find(x=>x.deviceId===id);
+  /* ALARM */
+  if(d.alarmActive && d.isWatched){
+    const audio=new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    audio.play();
+
+    fetch("https://gps-server-f9b6.onrender.com/notify",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        token:d.fcmToken,
+        title:"🚨 Alarm",
+        body:`${d.name} hat Alarm ausgelöst`
+      })
+    }).catch(()=>{});
+  }
+
+  const ex=list.find(x=>x.deviceId===id);
   if(!ex) list.push(d);
   else Object.assign(ex,d);
 
@@ -281,24 +250,26 @@ function update(d){
 
 /* UI */
 function render(){
-  const el = document.getElementById("list");
-  el.innerHTML = "";
+  const el=document.getElementById("list");
+  el.innerHTML="";
 
-  list.forEach(d => {
+  list.forEach(d=>{
 
-    const div = document.createElement("div");
-    div.className = "device";
+    const speed=(d.speed??0)*3.6;
 
-    div.innerHTML = `
-      <b>${d.name}</b><br>
-      📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
-      🎯 Accuracy: ${d.accuracy ?? "-"} m<br><br>
+    el.innerHTML+=`
+      <div style="padding:10px;border-bottom:1px solid #333;">
+        <b>${d.name}</b><br>
+        📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
+        🚗 ${speed.toFixed(1)} km/h<br>
+        🎯 Accuracy: ${d.accuracy??"-"} m<br>
+        🔋 Akku: ${d.battery??"-"}%<br>
+        📡 Status: ${d.status??"unknown"}<br><br>
 
-      <button class="follow" onclick="followId='${d.deviceId}'">Follow</button>
-      <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
+        <button class="follow" onclick="followId='${d.deviceId}'">Follow</button>
+        <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
+      </div>
     `;
-
-    el.appendChild(div);
   });
 }
 
@@ -309,15 +280,15 @@ function watch(id){
 
 /* LOAD */
 async function load(){
-  const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const d = await r.json();
+  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const d=await r.json();
   d.forEach(update);
 }
 load();
 
 /* WS */
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
-ws.onmessage = (m)=>{ try{ update(JSON.parse(m.data)); }catch(e){} };
+const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
+ws.onmessage=(m)=>{try{update(JSON.parse(m.data));}catch(e){}};
 
 </script>
 
