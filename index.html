@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Realtime Pro - FIX</title>
+<title>GPS Realtime Pro - MASTER</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -42,43 +42,41 @@ button{
 .follow{background:#0a84ff;color:white;}
 .alarm{background:#ff3b30;color:white;}
 
+/* WATCH pulse */
 @keyframes pulseWatch {
   0% { transform: scale(1); opacity: 0.7; }
   100% { transform: scale(2.2); opacity: 0; }
 }
 
+/* BLINK ALARM */
 @keyframes blinkAlarm {
   0% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(1.15); }
   100% { opacity: 1; transform: scale(1); }
 }
-
 .alarmBlink {
   animation: blinkAlarm 0.8s infinite;
 }
 
-/* ✅ FIXED CENTERED ALARM RADIUS */
+/* ALARM RADIUS */
 @keyframes alarmPulse {
-  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.6; }
-  70% { transform: translate(-50%, -50%) scale(2.2); opacity: 0.1; }
-  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+  0% { transform: scale(0.8); opacity: 0.6; }
+  70% { transform: scale(2.2); opacity: 0.1; }
+  100% { transform: scale(2.6); opacity: 0; }
 }
 
 .alarmRadius {
   position:absolute;
   top:50%;
   left:50%;
-  width:90px;
-  height:90px;
-
+  transform:translate(-50%,-50%);
+  width:80px;
+  height:80px;
   border-radius:50%;
   border:2px solid red;
-  background:rgba(255,0,0,0.18);
-
+  background:rgba(255,0,0,0.15);
   animation: alarmPulse 1.2s infinite;
   pointer-events:none;
-  box-sizing:border-box;
-
   z-index:0;
 }
 </style>
@@ -87,15 +85,21 @@ button{
 <body>
 
 <div id="panel">
-  <b>🚗 GPS Realtime FIX</b><br>
+  <b>🚗 GPS Realtime MASTER</b><br>
+
   <button onclick="toggleNav()">Nav</button>
+  <button onclick="toggleAlarmSystem()">🔊 System</button>
+
   <hr>
+
   <div id="list"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
+
+/* ================= STATE ================= */
 
 const devices = {};
 const markers = {};
@@ -105,6 +109,7 @@ const heading = {};
 
 let followId = null;
 let navMode = false;
+let lastPan = 0;
 
 let alarmEnabled = true;
 let activeAlarmDevice = null;
@@ -119,15 +124,6 @@ document.addEventListener("click", () => {
     alarmAudio.currentTime = 0;
   }).catch(()=>{});
 }, { once: true });
-
-/* ================= MAP ================= */
-
-const map = L.map("map").setView([47.09,15.42],13);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution:"© OpenStreetMap"
-}).addTo(map);
 
 /* ================= HELPERS ================= */
 
@@ -172,15 +168,9 @@ function icon(name, angle, isWatched, alarmActive){
     iconAnchor:[30,30],
 
     html:`
-      <div style="
-        position:relative;
-        width:60px;
-        height:60px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        overflow:visible;
-      ">
+      <div class="${alarmActive ? 'alarmBlink' : ''}"
+        style="position:relative;width:60px;height:60px;
+        display:flex;align-items:center;justify-content:center;">
 
         ${alarmActive ? `<div class="alarmRadius"></div>` : ""}
 
@@ -223,6 +213,15 @@ function icon(name, angle, isWatched, alarmActive){
   });
 }
 
+/* ================= MAP ================= */
+
+const map = L.map("map").setView([47.09,15.42],13);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution:"© OpenStreetMap"
+}).addTo(map);
+
 /* ================= UPDATE ================= */
 
 function update(d){
@@ -253,10 +252,23 @@ function update(d){
     markers[id] = L.marker([lat,lon],{
       icon: icon(d.name, angle, d.isWatched, d.alarmActive)
     }).addTo(map);
+
+    tracks[id] = L.polyline([], {
+      color: color(d.name),
+      weight: 4,
+      opacity: 0.8
+    }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
   markers[id].setIcon(icon(d.name, angle, d.isWatched, d.alarmActive));
+
+  tracks[id].addLatLng([lat,lon]);
+
+  const MAX_POINTS = 500;
+  if(tracks[id].getLatLngs().length > MAX_POINTS){
+    tracks[id].setLatLngs(tracks[id].getLatLngs().slice(-MAX_POINTS));
+  }
 
   if(followId === id){
     if(navMode){
@@ -266,6 +278,28 @@ function update(d){
       map.setView(map.unproject(point, zoom), zoom);
     } else {
       map.panTo([lat,lon], {animate:true,duration:0.25});
+    }
+  }
+
+  /* ALARM SOUND */
+  if(followId === id && alarmEnabled){
+
+    if(d.alarmActive && activeAlarmDevice !== id){
+      alarmAudio.play().catch(()=>{});
+      activeAlarmDevice = id;
+    }
+
+    if(!d.alarmActive && activeAlarmDevice === id){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
+    }
+
+  } else {
+    if(activeAlarmDevice){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
     }
   }
 
@@ -299,7 +333,14 @@ function render(){
         🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
 
         <button class="follow" onclick="follow('${d.deviceId}')">
-          Follow
+          ${followId === d.deviceId ? "Unfollow" : "Follow"}
+        </button>
+
+        <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
+        <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
+
+        <button class="alarm" onclick="toggleAlarm('${d.deviceId}')">
+          ${d.alarmActive ? "🔊 OFF" : "🔇 ON"}
         </button>
       </div>
     `;
@@ -309,22 +350,65 @@ function render(){
 /* ================= ACTIONS ================= */
 
 function follow(id){
-  followId = id;
+  followId = (followId === id ? null : id);
 }
 
 function toggleNav(){
   navMode = !navMode;
 }
 
+function toggleAlarmSystem(){
+  alarmEnabled = !alarmEnabled;
+
+  if(!alarmEnabled){
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+    activeAlarmDevice = null;
+  }
+}
+
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+}
+
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
+
+function toggleAlarm(id){
+  const d = devices[id];
+  if(!d) return;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
+    method:"POST"
+  });
+}
+
+/* ================= LOAD ================= */
+
+async function load(){
+  const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data = await r.json();
+  data.forEach(update);
+}
+load();
+
 /* ================= WS ================= */
 
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+function connectWS(){
 
-ws.onmessage = (m) => {
-  const data = JSON.parse(m.data);
-  if(Array.isArray(data)) data.forEach(update);
-  else update(data);
-};
+  const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+
+  ws.onmessage = (m) => {
+    const data = JSON.parse(m.data);
+    if(Array.isArray(data)) data.forEach(update);
+    else update(data);
+  };
+
+  ws.onclose = () => setTimeout(connectWS, 2000);
+}
+
+connectWS();
 
 </script>
 
