@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html>
 <head>
 <meta charset="utf-8" />
@@ -47,6 +48,7 @@ button{
   100% { transform: scale(2.2); opacity: 0; }
 }
 </style>
+
 </head>
 
 <body>
@@ -54,6 +56,7 @@ button{
 <div id="panel">
   <b>🚗 GPS Realtime Pro</b>
   <button onclick="toggleNav()">Nav</button>
+  <button onclick="toggleAlarm()">🔊 Alarm</button>
   <hr>
   <div id="list"></div>
 </div>
@@ -74,16 +77,26 @@ let followId = null;
 let navMode = false;
 let lastPan = 0;
 
+let alarmEnabled = true;
+
 /* 🔊 Alarm */
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
 let activeAlarmDevice = null;
 
+/* 🔓 Audio Unlock (Mobile) */
+document.addEventListener("click", () => {
+  alarmAudio.play().then(() => {
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+  }).catch(()=>{});
+}, { once: true });
+
 /* ================= MAP ================= */
 
 const map = L.map("map").setView([47.09,15.42],13);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   attribution:"© OpenStreetMap"
 }).addTo(map);
 
@@ -207,11 +220,18 @@ function update(d){
   const displayAngle = navMode ? 0 : angle;
   markers[id].setIcon(icon(d.name, displayAngle, d.isWatched));
 
+  /* Track Limit */
   tracks[id].addLatLng([lat,lon]);
+
+  const MAX_POINTS = 500;
+  if (tracks[id].getLatLngs().length > MAX_POINTS) {
+    tracks[id].setLatLngs(
+      tracks[id].getLatLngs().slice(-MAX_POINTS)
+    );
+  }
 
   /* FOLLOW */
   if(followId === id){
-
     if(navMode){
       navigationCamera(lat, lon, angle);
     } else {
@@ -219,8 +239,8 @@ function update(d){
     }
   }
 
-  /* 🔊 Alarm nur für Follow */
-  if(followId === id){
+  /* 🔊 Alarm */
+  if(followId === id && alarmEnabled){
 
     if(d.alarmActive && activeAlarmDevice !== id){
       alarmAudio.play().catch(()=>{});
@@ -251,7 +271,6 @@ function normalFollow(lat, lon){
   if(now - lastPan < 300) return;
 
   lastPan = now;
-
   map.panTo([lat,lon], {animate:true,duration:0.25});
 }
 
@@ -259,19 +278,16 @@ function navigationCamera(lat, lon, angle){
 
   const now = Date.now();
   if(now - lastPan < 200) return;
-
   lastPan = now;
 
-  const mapPane = document.querySelector(".leaflet-map-pane");
-  if(mapPane){
-    mapPane.style.transform = `rotate(${-angle}deg)`;
-    mapPane.style.transformOrigin = "50% 50%";
-  }
+  const zoom = 17;
 
-  const offsetLat = lat + 0.0003 * Math.cos(angle * Math.PI/180);
-  const offsetLon = lon + 0.0003 * Math.sin(angle * Math.PI/180);
+  const point = map.project([lat, lon], zoom);
+  point.y -= 150;
 
-  map.setView([offsetLat, offsetLon], 17, {
+  const newLatLng = map.unproject(point, zoom);
+
+  map.setView(newLatLng, zoom, {
     animate:true,
     duration:0.3
   });
@@ -299,10 +315,18 @@ function render(){
         🎯 ${d.accuracy ?? "-"}m<br>
         ⏱ ${new Date(d.timestamp||Date.now()).toLocaleTimeString()}<br>
         🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
+        🔊 System: ${alarmEnabled ? "AN" : "AUS"}<br>
 
         <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
         <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
-        <button class="follow" onclick="follow('${d.deviceId}')">Follow</button>
+
+        <button class="follow" style="
+          background:${followId === d.deviceId ? '#00ff88' : '#0a84ff'};
+          color:white;
+        " onclick="follow('${d.deviceId}')">
+          Follow
+        </button>
+
         <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
       </div>
     `;
@@ -320,11 +344,24 @@ function unwatch(id){
 }
 
 function follow(id){
-  followId = id;
+  followId = (followId === id ? null : id);
+  render();
 }
 
 function toggleNav(){
   navMode = !navMode;
+}
+
+function toggleAlarm(){
+  alarmEnabled = !alarmEnabled;
+
+  if(!alarmEnabled){
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+    activeAlarmDevice = null;
+  }
+
+  render();
 }
 
 function alarm(id){
@@ -347,20 +384,34 @@ load();
 
 /* ================= WS ================= */
 
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+function connectWS(){
 
-ws.onmessage = (m) => {
-  try{
-    const data = JSON.parse(m.data);
+  const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-    if(Array.isArray(data)){
-      data.forEach(update);
-    } else {
-      update(data);
-    }
+  ws.onmessage = (m) => {
+    try{
+      const data = JSON.parse(m.data);
 
-  }catch(e){}
-};
+      if(Array.isArray(data)){
+        data.forEach(update);
+      } else {
+        update(data);
+      }
+
+    }catch(e){}
+  };
+
+  ws.onclose = () => {
+    console.log("WS reconnect...");
+    setTimeout(connectWS, 2000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+connectWS();
 
 </script>
 
