@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Realtime 2</title>
+<title>GPS Realtime Pro</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -54,7 +54,6 @@ button{
 <div id="panel">
   <b>🚗 GPS Realtime Pro</b>
   <button onclick="toggleNav()">Nav</button>
-  <button onclick="toggleAlarm()">🔊 Alarm</button>
   <hr>
   <div id="list"></div>
 </div>
@@ -75,13 +74,22 @@ let followId = null;
 let navMode = false;
 let lastPan = 0;
 
-let alarmEnabled = true;
-
+/* 🔊 Alarm */
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
 let activeAlarmDevice = null;
+let alarmEnabled = true;
 
-/* ================= MAP (NORMAL MODE) ================= */
+/* ================= AUDIO UNLOCK ================= */
+
+document.addEventListener("click", () => {
+  alarmAudio.play().then(() => {
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+  }).catch(()=>{});
+}, { once: true });
+
+/* ================= MAP (FIX: NORMAL TILE LAYER) ================= */
 
 const map = L.map("map").setView([47.09,15.42],13);
 
@@ -131,9 +139,20 @@ function icon(name, angle, isWatched){
       <div style="position:relative;width:60px;height:60px;
         display:flex;align-items:center;justify-content:center;">
 
+        ${isWatched ? `
+          <div style="
+            position:absolute;
+            width:70px;height:70px;
+            border:2px solid gold;
+            border-radius:50%;
+            animation:pulseWatch 1.5s infinite;
+          "></div>
+        ` : ""}
+
         <div style="
           position:absolute;
           font-size:30px;
+          color:black;
           transform: rotate(${angle||0}deg);
         ">▲</div>
 
@@ -197,18 +216,47 @@ function update(d){
   markers[id].setLatLng([lat,lon]);
   markers[id].setIcon(icon(d.name, angle, d.isWatched));
 
+  /* TRACK LIMIT (FIX) */
   tracks[id].addLatLng([lat,lon]);
 
   const MAX_POINTS = 500;
-  if (tracks[id].getLatLngs().length > MAX_POINTS) {
+  if(tracks[id].getLatLngs().length > MAX_POINTS){
     tracks[id].setLatLngs(tracks[id].getLatLngs().slice(-MAX_POINTS));
   }
 
+  /* FOLLOW */
   if(followId === id){
+
     if(navMode){
-      navigationCamera(lat, lon);
+      navigationCamera(lat, lon, angle);
     } else {
-      map.panTo([lat,lon], {animate:true});
+      const now = Date.now();
+      if(now - lastPan > 300){
+        lastPan = now;
+        map.panTo([lat,lon], {animate:true,duration:0.25});
+      }
+    }
+  }
+
+  /* ALARM (FIX + TOGGLE SAFE) */
+  if(followId === id && alarmEnabled){
+
+    if(d.alarmActive && activeAlarmDevice !== id){
+      alarmAudio.play().catch(()=>{});
+      activeAlarmDevice = id;
+    }
+
+    if(!d.alarmActive && activeAlarmDevice === id){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
+    }
+
+  } else {
+    if(activeAlarmDevice){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
     }
   }
 
@@ -217,14 +265,22 @@ function update(d){
 
 /* ================= CAMERA ================= */
 
-function navigationCamera(lat, lon){
+function navigationCamera(lat, lon, angle){
+
+  const now = Date.now();
+  if(now - lastPan < 200) return;
+  lastPan = now;
 
   const zoom = 17;
+
   const point = map.project([lat, lon], zoom);
   point.y -= 150;
 
-  map.setView(map.unproject(point, zoom), zoom, {
-    animate:true
+  const newLatLng = map.unproject(point, zoom);
+
+  map.setView(newLatLng, zoom, {
+    animate:true,
+    duration:0.3
   });
 }
 
@@ -242,17 +298,33 @@ function render(){
     el.innerHTML += `
       <div class="device">
         <b>${d.name}</b><br>
+
         📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
         🚗 ${speed.toFixed(1)} km/h<br>
+        🔋 ${d.battery ?? "-"}%<br>
+        📡 ${d.status ?? "unknown"}<br>
+        🎯 ${d.accuracy ?? "-"}m<br>
+        ⏱ ${new Date(d.timestamp||Date.now()).toLocaleTimeString()}<br>
         🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
 
-        <button onclick="follow('${d.deviceId}')">Follow</button>
+        <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
+        <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
+        <button class="follow" onclick="follow('${d.deviceId}')">Follow</button>
+        <button class="alarm" onclick="alarm('${d.deviceId}')">Alarm</button>
       </div>
     `;
   });
 }
 
 /* ================= ACTIONS ================= */
+
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+}
+
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
 
 function follow(id){
   followId = id;
@@ -264,21 +336,48 @@ function toggleNav(){
 
 function toggleAlarm(){
   alarmEnabled = !alarmEnabled;
+
+  if(!alarmEnabled){
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+    activeAlarmDevice = null;
+  }
 }
 
-/* ================= WS ================= */
+function alarm(id){
+  const d = devices[id];
+  const newState = !d.alarmActive;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${newState}`,{
+    method:"POST"
+  });
+}
+
+/* ================= LOAD ================= */
+
+async function load(){
+  const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data = await r.json();
+  data.forEach(update);
+}
+load();
+
+/* ================= WS (RECONNECT FIX) ================= */
 
 function connectWS(){
 
   const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
   ws.onmessage = (m) => {
-    const data = JSON.parse(m.data);
-    if(Array.isArray(data)) data.forEach(update);
-    else update(data);
+    try{
+      const data = JSON.parse(m.data);
+      if(Array.isArray(data)) data.forEach(update);
+      else update(data);
+    }catch(e){}
   };
 
   ws.onclose = () => setTimeout(connectWS, 2000);
+  ws.onerror = () => ws.close();
 }
 
 connectWS();
