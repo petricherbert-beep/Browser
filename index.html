@@ -21,75 +21,37 @@ body{
   overflow:hidden;
 }
 
-.app-frame{
-  position:fixed;
-  inset:0;
-  background:#070a0f;
-  z-index:0;
-}
-
-/* PANEL (ORIGINAL BEHALTEN + GLOW BALANCED) */
+/* PANEL */
 #panel{
   width:390px;
-  margin:1.5cm 0 1.5cm 1.5cm;
+  margin:1.5cm;
   overflow:auto;
-
   background:rgba(10,15,25,0.55);
   backdrop-filter:blur(16px);
   border-radius:18px;
   padding:14px;
-
   border:1px solid rgba(0,255,200,0.15);
-
-  box-shadow:
-    0 0 0 1px rgba(0,0,0,0.6),
-    0 0 25px rgba(0,255,200,0.12),
-    0 0 60px rgba(0,255,200,0.06);
-
-  z-index:9999;
+  box-shadow:0 0 25px rgba(0,255,200,0.12);
 }
 
-/* MAP (KORRIGIERT + MODERATER GLOW) */
+/* MAP */
 #map{
   flex:1;
-  margin:1.5cm 1.5cm 1.5cm 1cm;
-
+  margin:1.5cm 1.5cm 1.5cm 0;
   border-radius:20px;
   overflow:hidden;
-
-  position:relative;
-  z-index:1;
-
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.04),
-    0 0 30px rgba(0,255,200,0.15),
-    0 0 70px rgba(0,255,200,0.10),
-    0 0 140px rgba(0,255,200,0.06);
-
-  transition:box-shadow 0.3s ease;
+  box-shadow:0 0 30px rgba(0,255,200,0.15);
 }
 
-/* MAP ACTIVE PULSE */
+/* MAP ACTIVE (nur Follow/Track!) */
 .map-active{
-  animation:mapPulse 2.5s ease-in-out infinite;
+  animation:mapPulse 2.5s infinite;
 }
 
 @keyframes mapPulse{
-  0%{
-    box-shadow:
-      0 0 30px rgba(0,255,200,0.15),
-      0 0 70px rgba(0,255,200,0.10);
-  }
-  50%{
-    box-shadow:
-      0 0 55px rgba(0,255,200,0.25),
-      0 0 120px rgba(0,255,200,0.16);
-  }
-  100%{
-    box-shadow:
-      0 0 30px rgba(0,255,200,0.15),
-      0 0 70px rgba(0,255,200,0.10);
-  }
+  0%{ box-shadow:0 0 30px rgba(0,255,200,0.15); }
+  50%{ box-shadow:0 0 60px rgba(0,255,200,0.25); }
+  100%{ box-shadow:0 0 30px rgba(0,255,200,0.15); }
 }
 
 /* DEVICE */
@@ -101,82 +63,64 @@ body{
   border:1px solid rgba(0,255,200,0.08);
 }
 
-.device:hover{
-  border-color:rgba(0,255,200,0.25);
-  box-shadow:0 0 20px rgba(0,255,200,0.08);
-}
-
-.device b{color:#e6edf3;}
-
 /* BUTTONS */
 button{
-  margin:3px 2px;
+  margin:3px;
   padding:6px 10px;
-  font-size:12px;
   border-radius:10px;
   border:1px solid rgba(0,255,200,0.15);
-  background:rgba(10,20,30,0.6);
-  color:#c9d1d9;
-  cursor:pointer;
-  transition:0.2s;
+  background:rgba(0,0,0,0.3);
+  color:white;
 }
 
-button:hover{
-  transform:translateY(-1px);
-  border-color:rgba(0,255,200,0.6);
-}
-
-/* WATCH TOGGLE */
+/* WATCH (nur UI) */
 .active-watch{
-  color:#ffd84d;
+  box-shadow:0 0 12px #ffd84d;
   border-color:#ffd84d;
-  box-shadow:0 0 15px #ffd84d;
 }
 
-/* ALARM BUTTON PULSE */
+/* ALARM BUTTON */
 .active-alarm{
   color:#ff4d4d;
   border-color:#ff4d4d;
-  animation:alarmPulse 1.5s infinite;
+  animation:alarmPulse 1.3s infinite;
 }
 
 @keyframes alarmPulse{
-  0%{ box-shadow:0 0 8px #ff4d4d; }
-  50%{ box-shadow:0 0 22px #ff4d4d; }
-  100%{ box-shadow:0 0 8px #ff4d4d; }
+  0%{ box-shadow:0 0 6px #ff4d4d; }
+  50%{ box-shadow:0 0 20px #ff4d4d; }
+  100%{ box-shadow:0 0 6px #ff4d4d; }
 }
 
-/* MARKER ALARM PULSE */
+/* MARKER ALARM (WICHTIG FIX) */
 .marker-alarm{
   animation:markerPulse 1.2s infinite;
+  filter:drop-shadow(0 0 8px red);
 }
 
 @keyframes markerPulse{
-  0%{ transform:scale(1); filter:drop-shadow(0 0 5px red); }
-  50%{ transform:scale(1.35); filter:drop-shadow(0 0 15px red); }
-  100%{ transform:scale(1); filter:drop-shadow(0 0 5px red); }
+  0%{ transform:scale(1); }
+  50%{ transform:scale(1.35); }
+  100%{ transform:scale(1); }
 }
 
-/* CHIPS (ORIGINAL BEHALTEN) */
+/* CHIPS */
 .chip{
   display:inline-block;
   padding:2px 8px;
   border-radius:999px;
   font-size:11px;
   margin-left:6px;
-  border:1px solid rgba(255,255,255,0.1);
 }
 
-.online{color:#00ff7b;border-color:#00ff7b55;}
-.offline{color:#ff3b3b;border-color:#ff3b3b55;}
-.alarmChip{color:#ff3b3b;border-color:#ff3b3b55;}
+.online{color:#00ff7b;border:1px solid #00ff7b55;}
+.offline{color:#ff3b3b;border:1px solid #ff3b3b55;}
+.alarmChip{color:#ff3b3b;border:1px solid #ff3b3b55;}
 </style>
 
 </head>
 
 <body>
-
-<div class="app-frame"></div>
 
 <div id="panel">
   <b>🚗 GPS Control Center</b><br>
@@ -189,13 +133,14 @@ button:hover{
 
 <script>
 
-/* STATE (ORIGINAL + WATCH FIX) */
 const devices={}, markers={}, tracks={};
 const trackState={}, followState={}, watchState={};
 
-let followId=null;
+const map=L.map("map").setView([47.09,15.42],13);
 
-/* COLOR LOGIC (ORIGINAL BEHALTEN!) */
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:19}).addTo(map);
+
+/* COLOR */
 function color(name){
   const n=(name||"").toLowerCase();
   if(n.includes("oliver")) return "#3aa0ff";
@@ -203,38 +148,25 @@ function color(name){
   return "#00ffb3";
 }
 
-/* MAP */
-const map=L.map("map").setView([47.09,15.42],13);
-
-/* ORIGINAL STYLE BACK */
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  maxZoom:19
-}).addTo(map);
-
-/* ICON (FIX: COLOR BLEIBT + ALARM PULSE) */
+/* ICON (FIXED + STABIL) */
 function icon(d){
   const col=color(d.name);
   const letter=(d.name?.[0]||"?").toUpperCase();
 
-  const alarmClass = d.alarmActive ? "marker-alarm" : "";
+  const alarm = d.alarmActive ? "marker-alarm" : "";
 
   return L.divIcon({
     className:"",
-    iconSize:[40,40],
-    iconAnchor:[20,20],
     html:`
-      <div class="${alarmClass}" style="
-        font-size:26px;
+      <div class="${alarm}" style="
         color:${col};
+        font-size:26px;
         text-shadow:0 0 10px ${col};
       ">▲</div>
-      <div style="
-        position:absolute;
-        font-size:10px;
-        color:white;
-        font-weight:700;
-      ">${letter}</div>
-    `
+      <div style="position:absolute;font-size:10px;color:white;">${letter}</div>
+    `,
+    iconSize:[40,40],
+    iconAnchor:[20,20]
   });
 }
 
@@ -267,23 +199,21 @@ function update(d){
   render();
 }
 
-/* MAP GLOW (KONTROLLIERT) */
+/* MAP GLOW (NUR FOLLOW/TRACK) */
 function updateMapGlow(){
-  const anyActive =
+  const active =
     Object.values(followState).some(v=>v) ||
-    Object.values(trackState).some(v=>v) ||
-    Object.values(watchState).some(v=>v);
+    Object.values(trackState).some(v=>v);
 
-  document.getElementById("map").classList.toggle("map-active",anyActive);
+  document.getElementById("map").classList.toggle("map-active",active);
 }
 
-/* FOLLOW */
+/* TOGGLES */
 function follow(id){
   followState[id]=!followState[id];
   updateMapGlow();
 }
 
-/* TRACK */
 function toggleTrack(id){
   trackState[id]=!trackState[id];
 
@@ -294,7 +224,7 @@ function toggleTrack(id){
   updateMapGlow();
 }
 
-/* WATCH TOGGLE (FIX) */
+/* WATCH (UI ONLY) */
 function toggleWatch(id){
   watchState[id]=!watchState[id];
 
@@ -302,7 +232,6 @@ function toggleWatch(id){
     method:"POST"
   });
 
-  updateMapGlow();
   render();
 }
 
@@ -316,11 +245,6 @@ function toggleAlarm(id){
   });
 }
 
-/* CLEAR */
-function clearTrack(id){
-  if(tracks[id]) tracks[id].setLatLngs([]);
-}
-
 /* FULLSCREEN */
 function toggleFullscreen(){
   if(!document.fullscreenElement){
@@ -330,7 +254,7 @@ function toggleFullscreen(){
   }
 }
 
-/* RENDER (ORIGINAL + WATCH FIX) */
+/* RENDER */
 function render(){
   const el=document.getElementById("list");
   el.innerHTML="";
@@ -343,7 +267,7 @@ function render(){
         <b>${d.name}</b>
 
         <span class="chip ${d.status==='online'?'online':'offline'}">
-          ${d.status==='online'?'ONLINE':'OFFLINE'}
+          ${d.status}
         </span>
 
         ${d.alarmActive?`<span class="chip alarmChip">ALARM</span>`:""}
@@ -352,34 +276,27 @@ function render(){
 
         📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
         🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-
         🔋 ${d.battery??"-"}%<br>
-        🎯 ${d.accuracy??"-"} m<br>
-        📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
-        🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
-        👀 ${watchState[id]?"WATCHED":"NOT WATCHED"}<br>
 
         <hr>
 
         <button onclick="follow('${id}')">
-          🎯 FOLLOW ${followState[id]?"ON":"OFF"}
+          FOLLOW ${followState[id]?"ON":"OFF"}
         </button>
 
         <button onclick="toggleTrack('${id}')">
-          📍 TRACK ${trackState[id]?"ON":"OFF"}
+          TRACK ${trackState[id]?"ON":"OFF"}
         </button>
 
         <button class="${watchState[id]?'active-watch':''}"
           onclick="toggleWatch('${id}')">
-          👀 WATCH
+          WATCH
         </button>
 
         <button class="${d.alarmActive?'active-alarm':''}"
           onclick="toggleAlarm('${id}')">
-          🚨 ALARM
+          ALARM
         </button>
-
-        <button onclick="clearTrack('${id}')">CLEAR</button>
       </div>
     `;
   });
@@ -392,8 +309,7 @@ fetch("https://gps-server-f9b6.onrender.com/devices")
 
 /* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-
-ws.onmessage=(m)=>{
+ws.onmessage=m=>{
   const d=JSON.parse(m.data);
   Array.isArray(d)?d.forEach(update):update(d);
 };
