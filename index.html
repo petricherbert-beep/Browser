@@ -21,261 +21,172 @@ body{
   overflow:hidden;
 }
 
-/* BACKGROUND */
-.app-frame{
-  position:fixed;
-  inset:0;
-  background:#070a0f;
-  z-index:0;
-}
-
-/* SHARED GLOW */
-.glow-box{
-  backdrop-filter:blur(10px);
-  border-radius:18px;
-  border:1px solid rgba(0,255,200,0.12);
-
-  box-shadow:
-    0 0 0 1px rgba(0,0,0,0.6),
-    0 0 20px rgba(0,255,200,0.12),
-    0 0 50px rgba(0,255,200,0.08);
-}
-
 /* PANEL */
 #panel{
   width:390px;
   margin:1.5cm 0 1.5cm 1.5cm;
   overflow:auto;
   background:rgba(10,15,25,0.55);
+  backdrop-filter:blur(16px);
+  border-radius:18px;
   padding:14px;
-  z-index:9999;
+  border:1px solid rgba(0,255,200,0.15);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
+    0 0 25px rgba(0,255,200,0.12);
 }
-#panel.glow-box{}
 
 /* MAP */
 #map{
   flex:1;
-  margin:1.5cm 1.5cm 1.5cm 1cm;
+  margin:1.5cm;
   border-radius:20px;
   overflow:hidden;
-  position:relative;
-  z-index:1;
 
   box-shadow:
-    0 0 0 1px rgba(255,255,255,0.05),
-    0 0 25px rgba(0,255,200,0.12),
-    0 0 60px rgba(0,255,200,0.08);
+    0 0 30px rgba(0,255,200,0.15),
+    0 0 80px rgba(0,255,200,0.08);
+
+  transition:0.3s;
 }
 
-/* DEVICE */
-.device{
-  margin-top:10px;
-  padding:12px;
-  background:rgba(255,255,255,0.03);
-  border-radius:14px;
-  border:1px solid rgba(0,255,200,0.08);
+.map-active{
+  animation:mapPulse 2.5s infinite;
 }
 
-.device:hover{
-  border-color:rgba(0,255,200,0.25);
-  box-shadow:0 0 12px rgba(0,255,200,0.08);
+@keyframes mapPulse{
+  0%{ box-shadow:0 0 30px rgba(0,255,200,0.15); }
+  50%{ box-shadow:0 0 60px rgba(0,255,200,0.3); }
+  100%{ box-shadow:0 0 30px rgba(0,255,200,0.15); }
 }
-
-.device b{color:#e6edf3;}
 
 /* BUTTONS */
 button{
-  margin:3px 2px;
+  margin:3px;
   padding:6px 10px;
-  font-size:12px;
   border-radius:10px;
-  border:1px solid rgba(0,255,200,0.15);
-  background:rgba(10,20,30,0.6);
-  color:#c9d1d9;
+  border:1px solid rgba(0,255,200,0.2);
+  background:rgba(0,0,0,0.3);
+  color:white;
   cursor:pointer;
-  transition:0.2s;
 }
 
-button:hover{
-  transform:translateY(-1px);
-  border-color:rgba(0,255,200,0.5);
-}
-
-/* ACTIVE BUTTON GLOW (STRONG) */
-.active-follow,
-.active-track,
-.active-alarm,
-.active-watch{
-  border-width:1px;
-  transform:translateY(-1px);
-
-  box-shadow:
-    0 0 10px currentColor,
-    0 0 20px currentColor,
-    0 0 40px currentColor;
-}
-
-/* COLORS PER STATE */
-.active-follow{
-  color:#3aa0ff;
-  border-color:#3aa0ff;
-}
-
-.active-track{
-  color:#00ffb3;
-  border-color:#00ffb3;
-}
-
+/* STATES */
 .active-alarm{
   color:#ff4d4d;
   border-color:#ff4d4d;
+  animation:alarmPulse 1.5s infinite;
+}
+
+@keyframes alarmPulse{
+  0%{ box-shadow:0 0 10px #ff4d4d; }
+  50%{ box-shadow:0 0 25px #ff4d4d; }
+  100%{ box-shadow:0 0 10px #ff4d4d; }
 }
 
 .active-watch{
   color:#ffd84d;
   border-color:#ffd84d;
+  box-shadow:0 0 15px #ffd84d;
 }
 
-/* CHIPS */
-.chip{
-  display:inline-block;
-  padding:2px 8px;
-  border-radius:999px;
-  font-size:11px;
-  margin-left:6px;
-  border:1px solid rgba(255,255,255,0.1);
+/* MARKER PULSE */
+.marker-alarm{
+  animation:markerPulse 1.2s infinite;
 }
 
-.online{color:#00ff7b;border-color:#00ff7b55;}
-.offline{color:#ff3b3b;border-color:#ff3b3b55;}
-.alarmChip{color:#ff3b3b;border-color:#ff3b3b55;}
+@keyframes markerPulse{
+  0%{ transform:scale(1); filter:drop-shadow(0 0 5px red); }
+  50%{ transform:scale(1.4); filter:drop-shadow(0 0 15px red); }
+  100%{ transform:scale(1); filter:drop-shadow(0 0 5px red); }
+}
+
+.device{margin-top:10px;}
 </style>
 
 </head>
 
 <body>
 
-<div class="app-frame"></div>
-
-<div id="panel" class="glow-box">
-  <b>🚗 GPS Control Center</b><br>
-  <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
-  <hr>
-  <div id="list"></div>
+<div id="panel">
+<b>🚗 GPS Control Center</b><br><hr>
+<div id="list"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
-const devices={}, markers={}, tracks={}, trackState={}, followState={};
-let followId=null;
-
-/* WATCH STATE (NEW) */
-const watchState={};
-
-function color(name){
-  const n=(name||"").toLowerCase();
-  if(n.includes("oliver")) return "#3aa0ff";
-  if(n.includes("nicole")) return "#ff4d4d";
-  return "#00ffb3";
-}
+const devices={}, markers={}, tracks={}, trackState={}, followState={}, watchState={};
 
 const map=L.map("map").setView([47.09,15.42],13);
 
-/* BACK TO ORIGINAL MAP */
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  maxZoom:19
-}).addTo(map);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
+/* ICON */
+function icon(d){
+  const col="#00ffb3";
+  const letter=(d.name?.[0]||"?").toUpperCase();
+
+  const alarmClass = d.alarmActive ? "marker-alarm" : "";
+
+  return L.divIcon({
+    className:"",
+    html:`
+      <div class="${alarmClass}" style="font-size:26px;color:${col};">
+        ▲
+      </div>
+      <div style="position:absolute;font-size:10px;color:white;">${letter}</div>
+    `,
+    iconSize:[40,40],
+    iconAnchor:[20,20]
+  });
+}
+
+/* UPDATE */
 function update(d){
   const id=d.deviceId;
-  const lat=+d.lat, lon=+d.lon;
-  if(!lat||!lon) return;
+  if(!d.lat||!d.lon) return;
 
   devices[id]=d;
   watchState[id]=d.isWatched;
 
   if(!markers[id]){
-    markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
-
-    tracks[id]=L.polyline([],{
-      color:color(d.name),
-      weight:3
-    }).addTo(map);
+    markers[id]=L.marker([d.lat,d.lon],{icon:icon(d)}).addTo(map);
   }
 
-  markers[id].setLatLng([lat,lon]);
-  tracks[id].addLatLng([lat,lon]);
+  markers[id].setLatLng([d.lat,d.lon]);
+  markers[id].setIcon(icon(d));
 
-  if(followState[id]){
-    map.panTo([lat,lon]);
-  }
-
+  updateMapGlow();
   render();
 }
 
-function icon(name){
-  const col=color(name);
-  const letter=(name?.[0]||"?").toUpperCase();
+/* MAP GLOW */
+function updateMapGlow(){
+  const anyActive =
+    Object.values(followState).some(v=>v) ||
+    Object.values(trackState).some(v=>v) ||
+    Object.values(watchState).some(v=>v);
 
-  return L.divIcon({
-    className:"",
-    iconSize:[40,40],
-    iconAnchor:[20,20],
-    html:`
-      <div style="display:flex;align-items:center;justify-content:center;">
-        <div style="
-          font-size:26px;
-          color:${col};
-          text-shadow:0 0 10px ${col};
-        ">▲</div>
-        <div style="
-          position:absolute;
-          font-size:10px;
-          color:white;
-          font-weight:700;
-        ">${letter}</div>
-      </div>
-    `
-  });
+  document.getElementById("map").classList.toggle("map-active",anyActive);
 }
 
-function follow(id){
-  followState[id]=!followState[id];
-  followId=followState[id]?id:null;
-}
+/* TOGGLES */
+function toggleWatch(id){
+  const active=!watchState[id];
+  watchState[id]=active;
 
-function toggleTrack(id){
-  trackState[id]=!trackState[id];
-  if(tracks[id]){
-    trackState[id]?map.addLayer(tracks[id]):map.removeLayer(tracks[id]);
-  }
-}
-
-function watch(id){
-  watchState[id]=true;
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${active?'watch':'unwatch'}`,{method:"POST"});
+  updateMapGlow();
   render();
 }
 
-function unwatch(id){
-  watchState[id]=false;
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
-  render();
+function toggleAlarm(id){
+  const d=devices[id];
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{method:"POST"});
 }
 
-function clearTrack(id){
-  if(tracks[id]) tracks[id].setLatLngs([]);
-}
-
-function toggleFullscreen(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  }else{
-    document.exitFullscreen();
-  }
-}
-
+/* RENDER */
 function render(){
   const el=document.getElementById("list");
   el.innerHTML="";
@@ -285,78 +196,34 @@ function render(){
 
     el.innerHTML+=`
       <div class="device">
-        <b>${d.name}</b>
-        <span class="chip ${d.status==='online'?'online':'offline'}">
-          ${d.status==='online'?'ONLINE':'OFFLINE'}
-        </span>
-        ${d.alarmActive?`<span class="chip alarmChip">ALARM</span>`:""}
-        <br><br>
-        📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
-        🚶 <span style="color:${d.isMotion?'#00ff99':'#ff4d4d'}">
-          ${d.isMotion?"MOVING":"STILL"}
-        </span><br>
-        🔋 ${d.battery??"-"}%<br>
-        🎯 ${d.accuracy??"-"} m<br>
-        📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
-        🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
+        <b>${d.name}</b><br>
+
         👀 ${watchState[id]?"WATCHED":"NOT WATCHED"}<br>
-        <hr>
 
-        <button class="${followState[id]?'active-follow':''}" onclick="follow('${id}')">
-          🎯 FOLLOW
-        </button>
-
-        <button class="${trackState[id]?'active-track':''}" onclick="toggleTrack('${id}')">
-          📍 TRACK
-        </button>
-
-        <button class="${watchState[id]?'active-watch':''}" onclick="watch('${id}')">
+        <button class="${watchState[id]?'active-watch':''}"
+          onclick="toggleWatch('${id}')">
           👀 WATCH
         </button>
 
-        <button onclick="unwatch('${id}')">
-          🚫 UNWATCH
-        </button>
-
-        <button class="${d.alarmActive?'active-alarm':''}" onclick="toggleAlarm('${id}')">
+        <button class="${d.alarmActive?'active-alarm':''}"
+          onclick="toggleAlarm('${id}')">
           🚨 ALARM
         </button>
-
-        <button onclick="clearTrack('${id}')">CLEAR</button>
       </div>
     `;
   });
 }
 
-function toggleAlarm(id){
-  const d=devices[id];
-  if(!d) return;
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
-    method:"POST"
-  });
-}
+/* LOAD */
+fetch("https://gps-server-f9b6.onrender.com/devices")
+.then(r=>r.json())
+.then(d=>d.forEach(update));
 
-async function load(){
-  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const data=await r.json();
-  data.forEach(update);
-
-  setTimeout(()=>{
-    const group=Object.values(markers);
-    if(group.length){
-      const fg=L.featureGroup(group);
-      map.fitBounds(fg.getBounds().pad(0.3));
-    }
-  },400);
-}
-load();
-
+/* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-
-ws.onmessage=(m)=>{
+ws.onmessage=m=>{
   const d=JSON.parse(m.data);
-  if(Array.isArray(d)) d.forEach(update);
-  else update(d);
+  Array.isArray(d)?d.forEach(update):update(d);
 };
 </script>
 
