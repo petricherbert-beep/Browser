@@ -152,7 +152,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
   maxZoom:19
 }).addTo(map);
 
-/* COLORS */
+/* COLOR */
 function color(name){
   const n=(name||"").toLowerCase();
   if(n.includes("oliver")) return "#3aa0ff";
@@ -209,7 +209,7 @@ function update(d){
 /* FOLLOW */
 function follow(id){
   followState[id]=!followState[id];
-  render(); // 🔥 sofort Glow
+  render();
 }
 
 /* TRACK */
@@ -222,10 +222,10 @@ function toggleTrack(id){
       : map.removeLayer(tracks[id]);
   }
 
-  render(); // 🔥 sofort Glow
+  render();
 }
 
-/* WATCH TOGGLE */
+/* WATCH */
 function toggleWatch(id){
   watchState[id]=!watchState[id];
 
@@ -236,7 +236,7 @@ function toggleWatch(id){
   render();
 }
 
-/* ALARM TOGGLE */
+/* ALARM */
 function toggleAlarm(id){
   const d=devices[id];
   if(!d) return;
@@ -251,7 +251,7 @@ function toggleAlarm(id){
   render();
 }
 
-/* CLEAR TRACK */
+/* CLEAR */
 function clearTrack(id){
   if(tracks[id]) tracks[id].setLatLngs([]);
 }
@@ -286,8 +286,13 @@ function render(){
         <br><br>
 
         📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
+        ⚡ Speed: ${d.speed ?? 0} km/h<br>
+        🎯 Accuracy: ${d.accuracy ?? "-"} m<br>
+        🔋 Battery: ${d.battery ?? "-"}%<br>
         🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-        🔋 ${d.battery??"-"}%<br>
+        📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
+        🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
+        👀 WATCHED: ${watchState[id] || d.isWatched ? "YES" : "NO"}<br>
 
         <hr>
 
