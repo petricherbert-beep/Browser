@@ -42,16 +42,12 @@ button{
 .follow{background:#0a84ff;color:white;}
 .alarm{background:#ff3b30;color:white;}
 
-@keyframes pulseWatch {
-  0% { transform: scale(1); opacity: 0.7; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-
 @keyframes blinkAlarm {
   0% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(1.15); }
   100% { opacity: 1; transform: scale(1); }
 }
+
 .alarmBlink {
   animation: blinkAlarm 0.8s infinite;
 }
@@ -101,13 +97,12 @@ button{
 const devices = {};
 const markers = {};
 const tracks = {};
-const showTracks = {}; // ✅ NEU
+const showTracks = {};
 const lastPos = {};
 const heading = {};
 
 let followId = null;
 let navMode = false;
-let lastPan = 0;
 
 let alarmEnabled = true;
 let activeAlarmDevice = null;
@@ -115,18 +110,11 @@ let activeAlarmDevice = null;
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
 
-document.addEventListener("click", () => {
-  alarmAudio.play().then(() => {
-    alarmAudio.pause();
-    alarmAudio.currentTime = 0;
-  }).catch(()=>{});
-}, { once: true });
-
 /* ================= HELPERS ================= */
 
 function getLastSeenSeconds(ts){
   if(!ts) return "?";
-  return Math.floor((Date.now() - ts) / 1000);
+  return Math.max(0, Math.floor((Date.now() - ts) / 1000));
 }
 
 function color(name){
@@ -134,6 +122,13 @@ function color(name){
   if(n.includes("oliver")) return "#3aa0ff";
   if(n.includes("nicole")) return "#ff4d4d";
   return "#4dffb5";
+}
+
+function accuracyColor(acc){
+  if(acc == null) return "white";
+  if(acc <= 5) return "#00ff88";
+  if(acc <= 20) return "#ffd60a";
+  return "#ff3b30";
 }
 
 function bearing(lat1, lon1, lat2, lon2){
@@ -150,6 +145,23 @@ function bearing(lat1, lon1, lat2, lon2){
     Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
 
   return (toDeg(Math.atan2(y,x)) + 360) % 360;
+}
+
+function distance(a, b){
+  const R = 6371e3;
+  const toRad = x => x * Math.PI/180;
+
+  const φ1 = toRad(a.lat);
+  const φ2 = toRad(b.lat);
+  const Δφ = toRad(b.lat - a.lat);
+  const Δλ = toRad(b.lon - a.lon);
+
+  const x =
+    Math.sin(Δφ/2)**2 +
+    Math.cos(φ1)*Math.cos(φ2)*
+    Math.sin(Δλ/2)**2;
+
+  return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
 }
 
 /* ================= ICON ================= */
@@ -177,7 +189,6 @@ function icon(name, angle, isWatched, alarmActive){
             width:70px;height:70px;
             border:2px solid gold;
             border-radius:50%;
-            animation:pulseWatch 1.5s infinite;
           "></div>
         ` : ""}
 
@@ -186,7 +197,6 @@ function icon(name, angle, isWatched, alarmActive){
           font-size:30px;
           color:black;
           transform: rotate(${angle||0}deg);
-          z-index:2;
         ">▲</div>
 
         <div style="
@@ -194,7 +204,6 @@ function icon(name, angle, isWatched, alarmActive){
           font-size:28px;
           color:${col};
           transform: rotate(${angle||0}deg);
-          z-index:2;
         ">▲</div>
 
         <div style="
@@ -202,7 +211,6 @@ function icon(name, angle, isWatched, alarmActive){
           font-size:11px;
           font-weight:800;
           color:white;
-          z-index:2;
         ">${letter}</div>
 
       </div>
@@ -231,15 +239,16 @@ function update(d){
   const prev = lastPos[id];
   let angle = heading[id] || 0;
 
-  if(prev && (d.speed ?? 0) > 0.5){
-    const moved =
-      Math.abs(lat-prev.lat) > 0.00001 ||
-      Math.abs(lon-prev.lon) > 0.00001;
+  const moving = d.isMotion || (d.speed ?? 0) > 0.5;
 
-    if(moved){
-      angle = bearing(prev.lat, prev.lon, lat, lon);
-      heading[id] = angle;
-    }
+  if(prev && moving){
+    angle = bearing(prev.lat, prev.lon, lat, lon);
+    heading[id] = angle;
+  }
+
+  if(prev){
+    const dist = distance(prev, {lat,lon});
+    if(dist > 500) return; // spike protection
   }
 
   lastPos[id] = {lat,lon};
@@ -264,17 +273,11 @@ function update(d){
   markers[id].setLatLng([lat,lon]);
   markers[id].setIcon(icon(d.name, angle, d.isWatched, d.alarmActive));
 
-  // Track immer speichern
-  tracks[id].addLatLng([lat,lon]);
+  if(!tracks[id]) return;
 
-  // Sichtbarkeit
-  if(showTracks[id] === false && map.hasLayer(tracks[id])){
-    map.removeLayer(tracks[id]);
-  }
-
-  const MAX_POINTS = 500;
-  if(tracks[id].getLatLngs().length > MAX_POINTS){
-    tracks[id].setLatLngs(tracks[id].getLatLngs().slice(-MAX_POINTS));
+  const prev2 = tracks[id].getLatLngs().slice(-1)[0];
+  if(!prev2 || distance(prev2, {lat,lon}) > 2){
+    tracks[id].addLatLng([lat,lon]);
   }
 
   if(followId === id){
@@ -284,28 +287,7 @@ function update(d){
       point.y -= 150;
       map.setView(map.unproject(point, zoom), zoom);
     } else {
-      map.panTo([lat,lon], {animate:true,duration:0.25});
-    }
-  }
-
-  if(followId === id && alarmEnabled){
-
-    if(d.alarmActive && activeAlarmDevice !== id){
-      alarmAudio.play().catch(()=>{});
-      activeAlarmDevice = id;
-    }
-
-    if(!d.alarmActive && activeAlarmDevice === id){
-      alarmAudio.pause();
-      alarmAudio.currentTime = 0;
-      activeAlarmDevice = null;
-    }
-
-  } else {
-    if(activeAlarmDevice){
-      alarmAudio.pause();
-      alarmAudio.currentTime = 0;
-      activeAlarmDevice = null;
+      map.panTo([lat,lon]);
     }
   }
 
@@ -329,33 +311,28 @@ function render(){
 
         📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
         🚗 ${speed.toFixed(1)} km/h<br>
+
         🔋 ${d.battery ?? "-"}%<br>
 
         🔒 ${d.isLocked ? "LOCKED" : "UNLOCKED"}<br>
-        👀 ${d.isWatched ? "WATCHED" : "NOT WATCHED"}<br>
-        📶 ${d.isWifi ? "WIFI" : "MOBILE"}<br>
+        🚶 ${d.isMotion ? "MOVING" : "STILL"}<br>
+
+        🎯 <span style="color:${accuracyColor(d.accuracy)}">
+          ${d.accuracy ?? "-"} m
+        </span><br>
 
         ⏱ ${getLastSeenSeconds(d.timestamp)}s ago<br>
-        🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
 
         <button class="follow" onclick="follow('${d.deviceId}')">
-          ${followId === d.deviceId ? "Unfollow" : "Follow"}
+          Follow
         </button>
 
-        <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
-        <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
-
-        <button class="alarm" onclick="toggleAlarm('${d.deviceId}')">
-          ${d.alarmActive ? "🔊 OFF" : "🔇 ON"}
-        </button>
-
-        <!-- ✅ NEU -->
         <button onclick="toggleTrack('${d.deviceId}')">
-          ${showTracks[d.deviceId] === false ? "Track ON" : "Track OFF"}
+          Track
         </button>
 
         <button onclick="clearTrack('${d.deviceId}')">
-          🧹 Track löschen
+          Clear
         </button>
       </div>
     `;
@@ -374,35 +351,12 @@ function toggleNav(){
 
 function toggleAlarmSystem(){
   alarmEnabled = !alarmEnabled;
-
-  if(!alarmEnabled){
-    alarmAudio.pause();
-    alarmAudio.currentTime = 0;
-    activeAlarmDevice = null;
-  }
 }
 
-function watch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
-}
+/* ================= TRACK ================= */
 
-function unwatch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
-}
-
-function toggleAlarm(id){
-  const d = devices[id];
-  if(!d) return;
-
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
-    method:"POST"
-  });
-}
-
-/* ✅ NEU */
 function toggleTrack(id){
-
-  showTracks[id] = showTracks[id] === false ? true : false;
+  showTracks[id] = !showTracks[id];
 
   if(tracks[id]){
     if(showTracks[id] === false){
@@ -415,14 +369,13 @@ function toggleTrack(id){
   render();
 }
 
-/* ✅ NEU */
 function clearTrack(id){
   if(tracks[id]){
     tracks[id].setLatLngs([]);
   }
 }
 
-/* ================= LOAD ================= */
+/* ================= LOAD + WS ================= */
 
 async function load(){
   const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
@@ -431,10 +384,7 @@ async function load(){
 }
 load();
 
-/* ================= WS ================= */
-
 function connectWS(){
-
   const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
   ws.onmessage = (m) => {
