@@ -18,32 +18,32 @@ body{
   overflow:hidden;
 }
 
+/* PANEL */
 #panel{
   width:390px;
   margin:1.5cm;
   overflow:auto;
   background:rgba(10,15,25,0.55);
   padding:14px;
-  z-index:10;
 }
 
+/* MAP */
 #map{
   flex:1;
   margin:1.5cm;
   border-radius:20px;
   overflow:hidden;
   position:relative;
-
   filter: contrast(0.82) brightness(0.92) saturate(0.85);
 }
 
+/* FIXED VIGNETTE (neutral center) */
 .map-overlay{
   position:absolute;
   inset:0;
   pointer-events:none;
   z-index:999;
 
-  /* ✅ FIXED VIGNETTE */
   background: radial-gradient(circle at center,
     rgba(0,0,0,0.00) 0%,
     rgba(0,0,0,0.00) 55%,
@@ -53,11 +53,14 @@ body{
   );
 }
 
-/* chips */
-.chip{font-size:11px;padding:2px 6px;border-radius:999px}
-.online{color:#00ff7b}
-.offline{color:#ff3b3b}
-.alarm{color:#ff4d4d}
+/* UI */
+.device{
+  padding:10px;
+  margin-bottom:10px;
+  border:1px solid rgba(0,255,200,0.1);
+  border-radius:12px;
+  background:rgba(255,255,255,0.03);
+}
 
 button{
   margin:3px;
@@ -67,6 +70,13 @@ button{
   border:1px solid #00ffb355;
   background:#0a141f;
   color:#c9d1d9;
+  cursor:pointer;
+}
+
+.info{
+  font-size:12px;
+  line-height:1.4;
+  opacity:0.9;
 }
 </style>
 </head>
@@ -84,22 +94,23 @@ button{
 
 <script>
 
-/* STATE */
+/* ---------------- STATE ---------------- */
 const devices = {};
 const ui = {};
 const markers = {};
 const tracks = {};
 const anim = {};
+
 let followId = null;
 
-/* MAP */
+/* ---------------- MAP ---------------- */
 const map = L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
   maxZoom:19
 }).addTo(map);
 
-/* COLOR */
+/* ---------------- COLOR ---------------- */
 function color(n){
   n=(n||"").toLowerCase();
   if(n.includes("oliver")) return "#3aa0ff";
@@ -107,30 +118,46 @@ function color(n){
   return "#00ffb3";
 }
 
-/* ICON (RESTORED SHARP STYLE) */
+/* ---------------- ICON (INITIALS RESTORED) ---------------- */
 function icon(name){
   const c = color(name);
-  const letter = (name?.[0]||"?").toUpperCase();
+  const letter = (name?.[0] || "?").toUpperCase();
 
   return L.divIcon({
     className:"",
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="text-align:center">
+      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
+        
         <div style="
           font-size:26px;
           color:${c};
-          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;
+          text-shadow:
+            -1px -1px 0 #000,
+             1px -1px 0 #000,
+            -1px  1px 0 #000,
+             1px  1px 0 #000;
         ">▲</div>
-        <div style="position:absolute;margin-top:-18px;font-size:10px;color:#fff">${letter}</div>
+
+        <div style="
+          position:absolute;
+          font-size:11px;
+          font-weight:700;
+          color:#fff;
+          text-shadow:0 0 6px rgba(0,0,0,0.9);
+          transform:translateY(6px);
+        ">
+          ${letter}
+        </div>
+
       </div>
     `
   });
 }
 
-/* SMOOTH (no leak) */
-function smooth(id, lat, lon){
+/* ---------------- SMOOTH MOVE (NO LEAKS) ---------------- */
+function smoothMove(id, lat, lon){
   const m = markers[id];
   if(!m) return;
 
@@ -140,106 +167,144 @@ function smooth(id, lat, lon){
   const t0 = performance.now();
 
   function step(t){
-    const p = Math.min((t-t0)/250,1);
+    const p = Math.min((t - t0) / 250, 1);
 
     m.setLatLng([
-      start.lat + (lat-start.lat)*p,
-      start.lng + (lon-start.lng)*p
+      start.lat + (lat - start.lat) * p,
+      start.lng + (lon - start.lng) * p
     ]);
 
-    if(p<1) anim[id]=requestAnimationFrame(step);
+    if(p < 1) anim[id] = requestAnimationFrame(step);
   }
 
-  anim[id]=requestAnimationFrame(step);
+  anim[id] = requestAnimationFrame(step);
 }
 
-/* TRACK */
-function track(id, lat, lon){
+/* ---------------- TRACK ---------------- */
+function addTrack(id, lat, lon){
   const t = tracks[id];
   if(!t) return;
 
-  const p = t.getLatLngs();
-  p.push([lat,lon]);
-  if(p.length>400) p.splice(0,p.length-400);
-  t.setLatLngs(p);
+  const pts = t.getLatLngs();
+  pts.push([lat,lon]);
+
+  if(pts.length > 400) pts.splice(0, pts.length - 400);
+  t.setLatLngs(pts);
 }
 
-/* UPDATE */
+/* ---------------- UPDATE ---------------- */
 function update(d){
   const id = d.deviceId;
   const lat = +d.lat, lon = +d.lon;
-  if(!lat||!lon) return;
+  if(!lat || !lon) return;
 
   devices[id] = {...devices[id], ...d};
   ui[id] = ui[id] || {follow:false,track:false,watch:false};
 
   if(!markers[id]){
-    markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
-    tracks[id]=L.polyline([], {color:color(d.name),weight:3}).addTo(map);
+    markers[id] = L.marker([lat,lon], {icon: icon(d.name)}).addTo(map);
+
+    tracks[id] = L.polyline([], {
+      color: color(d.name),
+      weight: 3
+    }).addTo(map);
   }
 
-  smooth(id,lat,lon);
-  track(id,lat,lon);
+  smoothMove(id, lat, lon);
+  addTrack(id, lat, lon);
 
-  if(followId===id){
+  if(followId === id){
     map.panTo([lat,lon]);
   }
 
   render();
 }
 
-/* FOLLOW */
+/* ---------------- FOLLOW ---------------- */
 function follow(id){
-  ui[id].follow=!ui[id].follow;
+  ui[id].follow = !ui[id].follow;
   followId = ui[id].follow ? id : null;
 
   if(followId && devices[id]){
-    map.flyTo([devices[id].lat,devices[id].lon],16);
+    map.flyTo([devices[id].lat, devices[id].lon], 16);
   }
 
   render();
 }
 
-/* UI */
+/* ---------------- WATCH ---------------- */
+function watch(id){
+  ui[id].watch = !ui[id].watch;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${ui[id].watch?"watch":"unwatch"}`,{
+    method:"POST"
+  });
+
+  render();
+}
+
+/* ---------------- ALARM ---------------- */
+function alarm(id){
+  devices[id].alarmActive = !devices[id].alarmActive;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${devices[id].alarmActive}`,{
+    method:"POST"
+  });
+
+  render();
+}
+
+/* ---------------- RENDER (FULL INFO RESTORED) ---------------- */
 function render(){
-  const el=document.getElementById("list");
-  el.innerHTML="";
+  const el = document.getElementById("list");
+  el.innerHTML = "";
 
   Object.entries(devices).forEach(([id,d])=>{
-    const u=ui[id];
+    const u = ui[id] || {};
 
-    el.innerHTML+=`
-      <div>
-        <b>${d.name}</b>
-        <span class="chip ${d.status==='online'?'online':'offline'}">
-          ${d.status}
-        </span><br>
+    el.innerHTML += `
+      <div class="device">
+        <b>${d.name}</b><br><br>
 
         📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
 
-        <button onclick="follow('${id}')">FOLLOW</button>
+        <div class="info">
+          ⚡ Speed: ${d.speed ?? 0} km/h<br>
+          🎯 Accuracy: ${d.accuracy ?? "-"} m<br>
+          🔋 Battery: ${d.battery ?? "-"}%<br>
+          🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+          📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
+          🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
+          👀 WATCHED: ${u.watch?"YES":"NO"}<br>
+          ${d.alarmActive ? '<span style="color:#ff4d4d">ALARM ACTIVE</span>' : ""}
+        </div>
+
+        <hr>
+
+        <button onclick="follow('${id}')">🎯 FOLLOW</button>
+        <button onclick="watch('${id}')">👀 WATCH</button>
+        <button onclick="alarm('${id}')">🚨 ALARM</button>
       </div>
-      <hr>
     `;
   });
 }
 
-/* LOAD */
+/* ---------------- LOAD ---------------- */
 fetch("https://gps-server-f9b6.onrender.com/devices")
 .then(r=>r.json())
 .then(a=>a.forEach(update));
 
-/* WS */
+/* ---------------- WS AUTO RECONNECT ---------------- */
 let ws;
 function connect(){
-  ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
+  ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-  ws.onmessage=(m)=>{
-    const d=JSON.parse(m.data);
-    Array.isArray(d)?d.forEach(update):update(d);
+  ws.onmessage = (m)=>{
+    const d = JSON.parse(m.data);
+    Array.isArray(d) ? d.forEach(update) : update(d);
   };
 
-  ws.onclose=()=>setTimeout(connect,2000);
+  ws.onclose = ()=> setTimeout(connect, 2000);
 }
 connect();
 
