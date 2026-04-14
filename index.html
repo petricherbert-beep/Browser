@@ -18,24 +18,23 @@ body{
   overflow:hidden;
 }
 
-/* PANEL */
+/* PANEL (neon restored) */
 #panel{
   width:390px;
   margin:1.5cm;
   overflow:auto;
   background:rgba(10,15,25,0.55);
   padding:14px;
-
-  /* 🔥 restored glow */
   border-radius:18px;
+
   border:1px solid rgba(0,255,200,0.12);
   box-shadow:
     0 0 0 1px rgba(0,0,0,0.6),
-    0 0 20px rgba(0,255,200,0.12),
-    0 0 50px rgba(0,255,200,0.08);
+    0 0 20px rgba(0,255,200,0.15),
+    0 0 60px rgba(0,255,200,0.08);
 }
 
-/* MAP */
+/* MAP (stronger glow restored) */
 #map{
   flex:1;
   margin:1.5cm;
@@ -43,26 +42,22 @@ body{
   overflow:hidden;
   position:relative;
 
-  /* 🔥 restored neon frame glow */
-  box-shadow:
-    0 0 18px rgba(0,255,200,0.10),
-    0 0 45px rgba(0,255,200,0.12),
-    inset 0 0 20px rgba(0,0,0,0.3);
-
   filter: contrast(0.82) brightness(0.92) saturate(0.85);
+
+  box-shadow:
+    0 0 25px rgba(0,255,200,0.18),
+    0 0 70px rgba(0,255,200,0.18),
+    inset 0 0 30px rgba(0,0,0,0.4);
+
+  animation: pulse 6s ease-in-out infinite;
 }
 
-/* subtle pulse (original vibe) */
-@keyframes mapPulse{
+@keyframes pulse{
   0%,100%{ filter: brightness(0.92) contrast(0.82); }
-  50%{ filter: brightness(0.97) contrast(0.86); }
+  50%{ filter: brightness(0.98) contrast(0.88); }
 }
 
-#map{
-  animation: mapPulse 6s ease-in-out infinite;
-}
-
-/* VIGNETTE (FIXED CENTER) */
+/* VIGNETTE */
 .map-overlay{
   position:absolute;
   inset:0;
@@ -72,13 +67,13 @@ body{
   background: radial-gradient(circle at center,
     rgba(0,0,0,0.00) 0%,
     rgba(0,0,0,0.00) 55%,
-    rgba(0,0,0,0.12) 75%,
-    rgba(0,0,0,0.30) 90%,
-    rgba(0,0,0,0.55) 100%
+    rgba(0,0,0,0.14) 75%,
+    rgba(0,0,0,0.35) 90%,
+    rgba(0,0,0,0.60) 100%
   );
 }
 
-/* DEVICE BOX */
+/* DEVICE */
 .device{
   padding:10px;
   margin-bottom:10px;
@@ -111,29 +106,29 @@ button:hover{
   border-color:rgba(0,255,200,0.5);
 }
 
-/* 🔥 FULL NEON RESTORE */
+/* 🔥 TOGGLE STATES (FULL NEON RESTORE) */
 .active-follow{
   color:#3aa0ff;
   border-color:#3aa0ff;
-  box-shadow:0 0 10px #3aa0ff, 0 0 20px rgba(58,160,255,0.2);
+  box-shadow:0 0 10px #3aa0ff, 0 0 25px rgba(58,160,255,0.35);
 }
 
 .active-track{
   color:#00ffb3;
   border-color:#00ffb3;
-  box-shadow:0 0 10px #00ffb3, 0 0 20px rgba(0,255,179,0.2);
+  box-shadow:0 0 10px #00ffb3, 0 0 25px rgba(0,255,179,0.35);
 }
 
 .active-watch{
   color:#ffd84d;
   border-color:#ffd84d;
-  box-shadow:0 0 10px #ffd84d, 0 0 20px rgba(255,216,77,0.2);
+  box-shadow:0 0 10px #ffd84d, 0 0 25px rgba(255,216,77,0.35);
 }
 
 .active-alarm{
   color:#ff4d4d;
   border-color:#ff4d4d;
-  box-shadow:0 0 10px #ff4d4d, 0 0 20px rgba(255,77,77,0.2);
+  box-shadow:0 0 10px #ff4d4d, 0 0 25px rgba(255,77,77,0.35);
 }
 </style>
 </head>
@@ -157,6 +152,7 @@ const ui = {};
 const markers = {};
 const tracks = {};
 const anim = {};
+
 let followId = null;
 
 /* MAP */
@@ -174,7 +170,7 @@ function color(n){
   return "#00ffb3";
 }
 
-/* ICON (initials restored) */
+/* ICON */
 function icon(name){
   const c=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
@@ -208,7 +204,7 @@ function icon(name){
   });
 }
 
-/* SMOOTH MOVE (clean RAF) */
+/* SMOOTH */
 function smoothMove(id, lat, lon){
   const m=markers[id];
   if(!m) return;
@@ -257,12 +253,16 @@ function update(d){
     markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
     tracks[id]=L.polyline([],{
       color:color(d.name),
-      weight:3
+      weight:3,
+      opacity:0.7
     }).addTo(map);
   }
 
   smoothMove(id,lat,lon);
-  addTrack(id,lat,lon);
+
+  if(ui[id].track){
+    addTrack(id,lat,lon);
+  }
 
   if(followId===id){
     map.panTo([lat,lon]);
@@ -276,11 +276,31 @@ function follow(id){
   ui[id].follow=!ui[id].follow;
   followId=ui[id].follow?id:null;
 
-  if(followId && devices[id]){
+  if(followId){
     map.flyTo([devices[id].lat,devices[id].lon],16);
   }
 
   render();
+}
+
+/* TRACK TOGGLE */
+function toggleTrack(id){
+  ui[id].track=!ui[id].track;
+
+  if(tracks[id]){
+    ui[id].track
+      ? map.addLayer(tracks[id])
+      : map.removeLayer(tracks[id]);
+  }
+
+  render();
+}
+
+/* CLEAR TRACK */
+function clearTrack(id){
+  if(tracks[id]){
+    tracks[id].setLatLngs([]);
+  }
 }
 
 /* WATCH */
@@ -333,8 +353,10 @@ function render(){
         <hr>
 
         <button class="${u?.follow?'active-follow':''}" onclick="follow('${id}')">🎯 FOLLOW</button>
+        <button class="${u?.track?'active-track':''}" onclick="toggleTrack('${id}')">📍 TRACK</button>
         <button class="${u?.watch?'active-watch':''}" onclick="watch('${id}')">👀 WATCH</button>
         <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">🚨 ALARM</button>
+        <button onclick="clearTrack('${id}')">CLEAR</button>
       </div>
     `;
   });
