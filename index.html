@@ -20,7 +20,7 @@ body{
   overflow:hidden;
 }
 
-/* BACKGROUND FRAME */
+/* BACKGROUND */
 .app-frame{
   position:fixed;
   inset:0;
@@ -28,10 +28,9 @@ body{
   z-index:0;
 }
 
-/* LEFT INFO PANEL */
+/* PANEL */
 #panel{
   width:390px;
-
   margin:1.5cm 0 1.5cm 1.5cm;
 
   overflow:auto;
@@ -40,6 +39,7 @@ body{
   backdrop-filter:blur(16px);
 
   border-radius:18px;
+
   padding:14px;
 
   border:1px solid rgba(0,255,200,0.15);
@@ -52,36 +52,31 @@ body{
   z-index:9999;
 }
 
-/* MAP RIGHT SIDE */
+/* MAP */
 #map{
   flex:1;
-
   margin:1.5cm 1.5cm 1.5cm 1cm;
 
-  border-radius:18px;
+  border-radius:20px;
   overflow:hidden;
-
   position:relative;
   z-index:1;
 
-  /* 🌟 SOFT EDGE GLOW */
   box-shadow:
-    0 0 0 1px rgba(255,255,255,0.05),
-    0 0 40px rgba(0,255,200,0.08),
-    0 0 80px rgba(0,0,0,0.6);
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 0 25px rgba(0,255,200,0.10),
+    0 0 60px rgba(0,255,200,0.08),
+    0 0 180px rgba(0,0,0,0.7);
 }
 
-/* DEVICE CARD */
+/* DEVICE */
 .device{
   margin-top:10px;
   padding:12px;
 
   background:rgba(255,255,255,0.03);
   border-radius:14px;
-
   border:1px solid rgba(0,255,200,0.08);
-
-  transition:0.2s;
 }
 
 .device:hover{
@@ -89,9 +84,7 @@ body{
   box-shadow:0 0 20px rgba(0,255,200,0.08);
 }
 
-.device b{
-  color:#e6edf3;
-}
+.device b{color:#e6edf3;}
 
 /* BUTTONS */
 button{
@@ -100,8 +93,8 @@ button{
   font-size:12px;
 
   border-radius:10px;
-  border:1px solid rgba(0,255,200,0.15);
 
+  border:1px solid rgba(0,255,200,0.15);
   background:rgba(10,20,30,0.6);
   color:#c9d1d9;
 
@@ -113,6 +106,25 @@ button:hover{
   transform:translateY(-1px);
   border-color:rgba(0,255,200,0.6);
   box-shadow:0 0 12px rgba(0,255,200,0.25);
+}
+
+/* STATES */
+.active-follow{
+  background:rgba(0,140,255,0.25);
+  border-color:rgba(0,140,255,0.8);
+  box-shadow:0 0 14px rgba(0,140,255,0.35);
+}
+
+.active-track{
+  background:rgba(0,255,180,0.20);
+  border-color:rgba(0,255,180,0.7);
+  box-shadow:0 0 14px rgba(0,255,180,0.25);
+}
+
+.active-alarm{
+  background:rgba(255,60,60,0.25);
+  border-color:rgba(255,60,60,0.8);
+  box-shadow:0 0 14px rgba(255,60,60,0.35);
 }
 
 /* CHIPS */
@@ -138,11 +150,8 @@ button:hover{
 
 <div id="panel">
   <b>🚗 GPS Control Center</b><br>
-
   <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
-
   <hr>
-
   <div id="list"></div>
 </div>
 
@@ -154,15 +163,17 @@ button:hover{
 const devices={};
 const markers={};
 const tracks={};
+
+const trackState={};
+const followState={};
+
 let followId=null;
 
-/* COLOR FIX */
+/* COLORS */
 function color(name){
   const n=(name||"").toLowerCase();
-
-  if(n.includes("oliver")) return "#3aa0ff"; // 🔵
-  if(n.includes("nicole")) return "#ff4d4d"; // 🔴
-
+  if(n.includes("oliver")) return "#3aa0ff";
+  if(n.includes("nicole")) return "#ff4d4d";
   return "#00ffb3";
 }
 
@@ -194,7 +205,7 @@ function update(d){
   markers[id].setLatLng([lat,lon]);
   tracks[id].addLatLng([lat,lon]);
 
-  if(followId===id){
+  if(followState[id]){
     map.panTo([lat,lon]);
   }
 
@@ -221,12 +232,58 @@ function icon(name){
         <div style="
           position:absolute;
           font-size:10px;
-          font-weight:700;
           color:white;
+          font-weight:700;
         ">${letter}</div>
       </div>
     `
   });
+}
+
+/* FOLLOW */
+function follow(id){
+  followState[id]=!followState[id];
+
+  if(followState[id]){
+    followId=id;
+  }else{
+    followId=null;
+  }
+}
+
+/* TRACK */
+function toggleTrack(id){
+  trackState[id]=!trackState[id];
+
+  if(tracks[id]){
+    if(trackState[id]){
+      map.addLayer(tracks[id]);
+    }else{
+      map.removeLayer(tracks[id]);
+    }
+  }
+}
+
+/* WATCH */
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+}
+
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
+
+function clearTrack(id){
+  if(tracks[id]) tracks[id].setLatLngs([]);
+}
+
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
 }
 
 /* RENDER */
@@ -251,55 +308,55 @@ function render(){
         <br><br>
 
         📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
-        🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+
+        🚶 <span style="color:${d.isMotion?'#00ff99':'#ff4d4d'}">
+          ${d.isMotion?"MOVING":"STILL"}
+        </span><br>
+
         🔋 ${d.battery??"-"}%<br>
         🎯 ${d.accuracy??"-"} m<br>
         📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
         🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
         👀 ${d.isWatched?"WATCHED":"NOT WATCHED"}<br>
-        ⏱ ${Math.max(0,Math.floor((Date.now()-d.timestamp)/1000))}s ago<br>
 
         <hr>
 
-        <button onclick="follow('${id}')">
-          ${followId===id?"Unfollow":"Follow"}
+        <button class="${followState[id]?'active-follow':''}"
+          onclick="follow('${id}')">
+          🎯 ${followState[id]?"FOLLOW ON":"FOLLOW"}
         </button>
 
-        <button onclick="watch('${id}')">Watch</button>
-        <button onclick="unwatch('${id}')">Unwatch</button>
-        <button onclick="clearTrack('${id}')">Clear</button>
+        <button class="${trackState[id]?'active-track':''}"
+          onclick="toggleTrack('${id}')">
+          📍 ${trackState[id]?"TRACK ON":"TRACK OFF"}
+        </button>
+
+        <button onclick="watch('${id}')">👀 WATCH</button>
+        <button onclick="unwatch('${id}')">🚫 UNWATCH</button>
+
+        <button class="${d.alarmActive?'active-alarm':''}"
+          onclick="toggleAlarm('${id}')">
+          🚨 ${d.alarmActive?"ALARM ON":"ALARM OFF"}
+        </button>
+
+        <button onclick="clearTrack('${id}')">CLEAR</button>
 
       </div>
     `;
   });
 }
 
-/* ACTIONS */
-function follow(id){
-  followId=followId===id?null:id;
+/* ALARM */
+function toggleAlarm(id){
+  const d=devices[id];
+  if(!d) return;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
+    method:"POST"
+  });
 }
 
-function watch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
-}
-
-function unwatch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
-}
-
-function clearTrack(id){
-  if(tracks[id]) tracks[id].setLatLngs([]);
-}
-
-function toggleFullscreen(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  }else{
-    document.exitFullscreen();
-  }
-}
-
-/* LOAD + AUTO FIT ALL */
+/* LOAD + AUTO FIT */
 async function load(){
   const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data=await r.json();
