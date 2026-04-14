@@ -16,9 +16,8 @@ body{
   background:#05070b;
   color:#c9d1d9;
   height:100vh;
-
-  display:flex;
   overflow:hidden;
+  display:flex;
 }
 
 /* FRAME */
@@ -33,9 +32,7 @@ body{
 #panel{
   width:390px;
 
-  margin-top:1.5cm;
-  margin-left:1.5cm;
-  margin-bottom:1.5cm;
+  margin:1.5cm 0 1.5cm 1.5cm;
 
   overflow:auto;
 
@@ -46,52 +43,57 @@ body{
   border-radius:16px;
 
   padding:14px;
-
   z-index:9999;
 }
 
-/* MAP RIGHT SIDE */
+/* RIGHT MAP */
 #map{
   flex:1;
-
-  margin-top:1.5cm;
-  margin-right:1.5cm;
-  margin-bottom:1.5cm;
-
-  margin-left:1cm; /* Abstand zum Infofeld */
-
+  margin:1.5cm 1.5cm 1.5cm 1cm;
   border-radius:16px;
   overflow:hidden;
-
+  position:relative;
   z-index:1;
 }
 
-/* DEVICE CARD */
+/* VIGNETTE */
+.map-vignette{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:999;
+
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(0,0,0,0) 40%,
+      rgba(0,0,0,0.25) 60%,
+      rgba(0,0,0,0.55) 80%,
+      rgba(0,0,0,0.85) 100%
+    );
+}
+
+/* DEVICE */
 .device{
   margin-top:10px;
   padding:12px;
-
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(0,255,200,0.08);
   border-radius:14px;
 }
 
-.device b{
-  color:#e6edf3;
-}
+.device b{color:#e6edf3;}
 
 /* BUTTONS */
 button{
   margin:3px 2px;
   padding:6px 10px;
   font-size:12px;
-
   border-radius:10px;
-  border:1px solid rgba(0,255,200,0.15);
 
+  border:1px solid rgba(0,255,200,0.15);
   background:rgba(10,20,30,0.6);
   color:#c9d1d9;
-
   cursor:pointer;
   transition:0.2s;
 }
@@ -100,16 +102,6 @@ button:hover{
   transform:translateY(-1px);
   border-color:rgba(0,255,200,0.6);
   box-shadow:0 0 12px rgba(0,255,200,0.25);
-}
-
-/* FOLLOW */
-.follow.active{
-  box-shadow:0 0 14px rgba(0,140,255,0.4);
-}
-
-/* ALARM */
-.alarm.active{
-  box-shadow:0 0 14px rgba(255,60,60,0.4);
 }
 
 /* CHIPS */
@@ -135,13 +127,16 @@ button:hover{
 
 <div id="panel">
   <b>🚗 GPS Control Center</b><br>
+
   <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
-  <button onclick="toggleNav()">Nav</button>
+
   <hr>
+
   <div id="list"></div>
 </div>
 
 <div id="map"></div>
+<div class="map-vignette"></div>
 
 <script>
 
@@ -150,6 +145,16 @@ const devices={};
 const markers={};
 const tracks={};
 let followId=null;
+
+/* COLOR FIX */
+function color(name){
+  const n=(name||"").toLowerCase();
+
+  if(n.includes("oliver")) return "#3aa0ff"; // 🔵
+  if(n.includes("nicole")) return "#ff4d4d"; // 🔴
+
+  return "#00ffb3";
+}
 
 /* MAP */
 const map=L.map("map").setView([47.09,15.42],13);
@@ -169,8 +174,9 @@ function update(d){
 
   if(!markers[id]){
     markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
+
     tracks[id]=L.polyline([],{
-      color:"#00ffb3",
+      color:color(d.name),
       weight:3
     }).addTo(map);
   }
@@ -187,7 +193,7 @@ function update(d){
 
 /* ICON */
 function icon(name){
-  const col="#00ffb3";
+  const col=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
 
   return L.divIcon({
@@ -195,9 +201,19 @@ function icon(name){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="display:flex;justify-content:center;align-items:center;">
-        <div style="font-size:24px;color:${col};text-shadow:0 0 10px ${col}">▲</div>
-        <div style="position:absolute;font-size:10px;color:white">${letter}</div>
+      <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+        <div style="
+          font-size:26px;
+          color:${col};
+          text-shadow:0 0 10px ${col};
+        ">▲</div>
+
+        <div style="
+          position:absolute;
+          font-size:10px;
+          font-weight:700;
+          color:white;
+        ">${letter}</div>
       </div>
     `
   });
@@ -235,14 +251,12 @@ function render(){
 
         <hr>
 
-        <button class="${followId===id?'active':''}"
-          onclick="follow('${id}')">
+        <button onclick="follow('${id}')">
           ${followId===id?"Unfollow":"Follow"}
         </button>
 
         <button onclick="watch('${id}')">Watch</button>
         <button onclick="unwatch('${id}')">Unwatch</button>
-
         <button onclick="clearTrack('${id}')">Clear</button>
 
       </div>
@@ -267,6 +281,7 @@ function clearTrack(id){
   if(tracks[id]) tracks[id].setLatLngs([]);
 }
 
+/* FULLSCREEN */
 function toggleFullscreen(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
@@ -275,16 +290,26 @@ function toggleFullscreen(){
   }
 }
 
-/* LOAD */
+/* LOAD + AUTO FIT ALL DEVICES */
 async function load(){
   const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data=await r.json();
+
   data.forEach(update);
+
+  setTimeout(()=>{
+    const group=Object.values(markers);
+    if(group.length){
+      const fg=L.featureGroup(group);
+      map.fitBounds(fg.getBounds().pad(0.3));
+    }
+  },400);
 }
 load();
 
 /* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
+
 ws.onmessage=(m)=>{
   const d=JSON.parse(m.data);
   if(Array.isArray(d)) d.forEach(update);
