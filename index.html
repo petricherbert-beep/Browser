@@ -11,7 +11,71 @@
 body { margin:0; font-family:system-ui; background:#0b0f14; }
 #map { height:100vh; }
 
-/* ... DEIN CSS UNVERÄNDERT ... */
+#panel{
+  position:absolute;
+  top:10px; left:10px;
+  width:380px;
+  max-height:90vh;
+  overflow:auto;
+  background:rgba(20,20,20,0.92);
+  color:white;
+  padding:10px;
+  border-radius:12px;
+  z-index:9999;
+}
+
+.device{
+  border-bottom:1px solid #333;
+  padding:10px 0;
+}
+
+button{
+  margin:2px;
+  padding:5px 7px;
+  font-size:12px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.watch{background:#ffcc00;}
+.follow{background:#0a84ff;color:white;}
+.alarm{background:#ff3b30;color:white;}
+
+@keyframes pulseWatch {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes blinkAlarm {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.alarmBlink {
+  animation: blinkAlarm 0.8s infinite;
+}
+
+@keyframes alarmPulse {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  70% { transform: scale(2.2); opacity: 0.1; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+.alarmRadius {
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  width:80px;
+  height:80px;
+  border-radius:50%;
+  border:2px solid red;
+  background:rgba(255,0,0,0.15);
+  animation: alarmPulse 1.2s infinite;
+  pointer-events:none;
+  z-index:0;
+}
 </style>
 </head>
 
@@ -24,6 +88,7 @@ body { margin:0; font-family:system-ui; background:#0b0f14; }
   <button onclick="toggleAlarmSystem()">🔊 System</button>
 
   <hr>
+
   <div id="list"></div>
 </div>
 
@@ -36,18 +101,114 @@ body { margin:0; font-family:system-ui; background:#0b0f14; }
 const devices = {};
 const markers = {};
 const tracks = {};
-const showTracks = {};   // ✅ NEU
+const showTracks = {}; // ✅ NEU
 const lastPos = {};
 const heading = {};
 
 let followId = null;
 let navMode = false;
+let lastPan = 0;
 
 let alarmEnabled = true;
 let activeAlarmDevice = null;
 
 const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
 alarmAudio.loop = true;
+
+document.addEventListener("click", () => {
+  alarmAudio.play().then(() => {
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+  }).catch(()=>{});
+}, { once: true });
+
+/* ================= HELPERS ================= */
+
+function getLastSeenSeconds(ts){
+  if(!ts) return "?";
+  return Math.floor((Date.now() - ts) / 1000);
+}
+
+function color(name){
+  const n=(name||"").toLowerCase();
+  if(n.includes("oliver")) return "#3aa0ff";
+  if(n.includes("nicole")) return "#ff4d4d";
+  return "#4dffb5";
+}
+
+function bearing(lat1, lon1, lat2, lon2){
+  const toRad = x => x * Math.PI / 180;
+  const toDeg = x => x * 180 / Math.PI;
+
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δλ = toRad(lon2 - lon1);
+
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+
+  return (toDeg(Math.atan2(y,x)) + 360) % 360;
+}
+
+/* ================= ICON ================= */
+
+function icon(name, angle, isWatched, alarmActive){
+
+  const col = color(name);
+  const letter = (name?.[0] || "?").toUpperCase();
+
+  return L.divIcon({
+    className:"",
+    iconSize:[60,60],
+    iconAnchor:[30,30],
+
+    html:`
+      <div class="${alarmActive ? 'alarmBlink' : ''}"
+        style="position:relative;width:60px;height:60px;
+        display:flex;align-items:center;justify-content:center;">
+
+        ${alarmActive ? `<div class="alarmRadius"></div>` : ""}
+
+        ${isWatched ? `
+          <div style="
+            position:absolute;
+            width:70px;height:70px;
+            border:2px solid gold;
+            border-radius:50%;
+            animation:pulseWatch 1.5s infinite;
+          "></div>
+        ` : ""}
+
+        <div style="
+          position:absolute;
+          font-size:30px;
+          color:black;
+          transform: rotate(${angle||0}deg);
+          z-index:2;
+        ">▲</div>
+
+        <div style="
+          position:absolute;
+          font-size:28px;
+          color:${col};
+          transform: rotate(${angle||0}deg);
+          z-index:2;
+        ">▲</div>
+
+        <div style="
+          position:absolute;
+          font-size:11px;
+          font-weight:800;
+          color:white;
+          z-index:2;
+        ">${letter}</div>
+
+      </div>
+    `
+  });
+}
 
 /* ================= MAP ================= */
 
@@ -67,19 +228,30 @@ function update(d){
   const lon = Number(d.lon);
   if(!lat || !lon) return;
 
+  const prev = lastPos[id];
+  let angle = heading[id] || 0;
+
+  if(prev && (d.speed ?? 0) > 0.5){
+    const moved =
+      Math.abs(lat-prev.lat) > 0.00001 ||
+      Math.abs(lon-prev.lon) > 0.00001;
+
+    if(moved){
+      angle = bearing(prev.lat, prev.lon, lat, lon);
+      heading[id] = angle;
+    }
+  }
+
+  lastPos[id] = {lat,lon};
   devices[id] = d;
 
   if(!markers[id]){
-    markers[id] = L.marker([lat,lon]).addTo(map);
-  }
+    markers[id] = L.marker([lat,lon],{
+      icon: icon(d.name, angle, d.isWatched, d.alarmActive)
+    }).addTo(map);
 
-  markers[id].setLatLng([lat,lon]);
-
-  /* ===== TRACK ===== */
-
-  if(!tracks[id]){
     tracks[id] = L.polyline([], {
-      color: "#4dffb5",
+      color: color(d.name),
       weight: 4,
       opacity: 0.8
     });
@@ -89,12 +261,52 @@ function update(d){
     }
   }
 
-  // Punkte IMMER speichern
+  markers[id].setLatLng([lat,lon]);
+  markers[id].setIcon(icon(d.name, angle, d.isWatched, d.alarmActive));
+
+  // Track immer speichern
   tracks[id].addLatLng([lat,lon]);
 
-  // Sichtbarkeit steuern
-  if(showTracks[id] === false){
+  // Sichtbarkeit
+  if(showTracks[id] === false && map.hasLayer(tracks[id])){
     map.removeLayer(tracks[id]);
+  }
+
+  const MAX_POINTS = 500;
+  if(tracks[id].getLatLngs().length > MAX_POINTS){
+    tracks[id].setLatLngs(tracks[id].getLatLngs().slice(-MAX_POINTS));
+  }
+
+  if(followId === id){
+    if(navMode){
+      const zoom = 17;
+      const point = map.project([lat, lon], zoom);
+      point.y -= 150;
+      map.setView(map.unproject(point, zoom), zoom);
+    } else {
+      map.panTo([lat,lon], {animate:true,duration:0.25});
+    }
+  }
+
+  if(followId === id && alarmEnabled){
+
+    if(d.alarmActive && activeAlarmDevice !== id){
+      alarmAudio.play().catch(()=>{});
+      activeAlarmDevice = id;
+    }
+
+    if(!d.alarmActive && activeAlarmDevice === id){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
+    }
+
+  } else {
+    if(activeAlarmDevice){
+      alarmAudio.pause();
+      alarmAudio.currentTime = 0;
+      activeAlarmDevice = null;
+    }
   }
 
   render();
@@ -109,11 +321,33 @@ function render(){
 
   Object.values(devices).forEach(d => {
 
+    const speed = (d.speed ?? 0) * 3.6;
+
     el.innerHTML += `
       <div class="device">
         <b>${d.name}</b><br>
 
-        <button onclick="follow('${d.deviceId}')">Follow</button>
+        📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
+        🚗 ${speed.toFixed(1)} km/h<br>
+        🔋 ${d.battery ?? "-"}%<br>
+
+        🔒 ${d.isLocked ? "LOCKED" : "UNLOCKED"}<br>
+        👀 ${d.isWatched ? "WATCHED" : "NOT WATCHED"}<br>
+        📶 ${d.isWifi ? "WIFI" : "MOBILE"}<br>
+
+        ⏱ ${getLastSeenSeconds(d.timestamp)}s ago<br>
+        🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
+
+        <button class="follow" onclick="follow('${d.deviceId}')">
+          ${followId === d.deviceId ? "Unfollow" : "Follow"}
+        </button>
+
+        <button class="watch" onclick="watch('${d.deviceId}')">Watch</button>
+        <button onclick="unwatch('${d.deviceId}')">Unwatch</button>
+
+        <button class="alarm" onclick="toggleAlarm('${d.deviceId}')">
+          ${d.alarmActive ? "🔊 OFF" : "🔇 ON"}
+        </button>
 
         <!-- ✅ NEU -->
         <button onclick="toggleTrack('${d.deviceId}')">
@@ -121,7 +355,7 @@ function render(){
         </button>
 
         <button onclick="clearTrack('${d.deviceId}')">
-          🧹 Clear Track
+          🧹 Track löschen
         </button>
       </div>
     `;
@@ -132,6 +366,37 @@ function render(){
 
 function follow(id){
   followId = (followId === id ? null : id);
+}
+
+function toggleNav(){
+  navMode = !navMode;
+}
+
+function toggleAlarmSystem(){
+  alarmEnabled = !alarmEnabled;
+
+  if(!alarmEnabled){
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+    activeAlarmDevice = null;
+  }
+}
+
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+}
+
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
+
+function toggleAlarm(id){
+  const d = devices[id];
+  if(!d) return;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
+    method:"POST"
+  });
 }
 
 /* ✅ NEU */
@@ -169,6 +434,7 @@ load();
 /* ================= WS ================= */
 
 function connectWS(){
+
   const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
   ws.onmessage = (m) => {
