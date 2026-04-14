@@ -106,6 +106,12 @@ button:hover{
   box-shadow:0 0 10px #ff4d4d;
 }
 
+.active-watch{
+  color:#ffd84d;
+  border-color:#ffd84d;
+  box-shadow:0 0 10px #ffd84d;
+}
+
 .chip{
   display:inline-block;
   padding:2px 8px;
@@ -137,6 +143,7 @@ button:hover{
 
 <script>
 const devices={}, markers={}, tracks={};
+
 const followState={}, trackState={}, watchState={};
 
 const map=L.map("map").setView([47.09,15.42],13);
@@ -202,30 +209,34 @@ function update(d){
 /* FOLLOW */
 function follow(id){
   followState[id]=!followState[id];
+  render(); // 🔥 sofort Glow
 }
 
 /* TRACK */
 function toggleTrack(id){
   trackState[id]=!trackState[id];
+
   if(tracks[id]){
     trackState[id]
       ? map.addLayer(tracks[id])
       : map.removeLayer(tracks[id]);
   }
+
+  render(); // 🔥 sofort Glow
 }
 
-/* WATCH */
-function watch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
-  watchState[id]=true;
+/* WATCH TOGGLE */
+function toggleWatch(id){
+  watchState[id]=!watchState[id];
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${watchState[id]?"watch":"unwatch"}`,{
+    method:"POST"
+  }).catch(()=>{});
+
+  render();
 }
 
-function unwatch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
-  watchState[id]=false;
-}
-
-/* 🔥 FIX: ALARM TOGGLE (AN + AUS sauber) */
+/* ALARM TOGGLE */
 function toggleAlarm(id){
   const d=devices[id];
   if(!d) return;
@@ -234,7 +245,7 @@ function toggleAlarm(id){
 
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${newState}`,{
     method:"POST"
-  });
+  }).catch(()=>{});
 
   d.alarmActive=newState;
   render();
@@ -288,12 +299,8 @@ function render(){
           📍 TRACK
         </button>
 
-        <button onclick="watch('${id}')">
+        <button class="${watchState[id]?'active-watch':''}" onclick="toggleWatch('${id}')">
           👀 WATCH
-        </button>
-
-        <button onclick="unwatch('${id}')">
-          🚫 UNWATCH
         </button>
 
         <button class="${d.alarmActive?'active-alarm':''}" onclick="toggleAlarm('${id}')">
@@ -308,9 +315,11 @@ function render(){
 
 /* LOAD */
 async function load(){
-  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const data=await r.json();
-  data.forEach(update);
+  try{
+    const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+    const data=await r.json();
+    data.forEach(update);
+  }catch(e){}
 }
 load();
 
