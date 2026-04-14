@@ -212,7 +212,8 @@ function update(d){
 
     tracks[id] = L.polyline([], {
       color: color(d.name),
-      weight: 3
+      weight: 4,
+    opacity: 0.25
     }).addTo(map);
   }
 
