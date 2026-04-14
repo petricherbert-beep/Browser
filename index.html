@@ -2,83 +2,119 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Realtime MASTER</title>
+<title>GPS Neon Dashboard</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-body { margin:0; font-family:system-ui; background:#0b0f14; }
-#map { height:100vh; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto;
+  background: #070b12;
+  color: #d7fff7;
+}
 
+#map {
+  height: 100vh;
+  filter: contrast(1.1) brightness(1.05);
+}
+
+/* PANEL */
 #panel{
   position:absolute;
-  top:10px; left:10px;
+  top:16px;
+  left:16px;
   width:390px;
-  max-height:90vh;
+  max-height:92vh;
   overflow:auto;
-  background:rgba(20,20,20,0.92);
-  color:white;
-  padding:10px;
-  border-radius:12px;
-  z-index:9999;
+
+  background: rgba(10, 15, 25, 0.55);
+  backdrop-filter: blur(16px);
+
+  border: 1px solid rgba(0,255,200,0.1);
+  border-radius: 16px;
+
+  padding: 14px;
+  z-index: 9999;
+
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
 }
 
-.device{
-  border-bottom:1px solid #333;
-  padding:10px 0;
-}
-
+/* BUTTONS */
 button{
-  margin:2px;
-  padding:5px 7px;
-  font-size:12px;
-  border:none;
-  border-radius:6px;
-  cursor:pointer;
+  margin: 3px 2px;
+  padding: 6px 10px;
+  font-size: 12px;
+
+  border-radius: 10px;
+  border: 1px solid rgba(0,255,200,0.15);
+
+  background: rgba(10, 20, 30, 0.6);
+  color: #d7fff7;
+
+  cursor: pointer;
+  transition: 0.2s;
+
+  backdrop-filter: blur(8px);
 }
 
-.watch{background:#ffcc00;}
-.follow{background:#0a84ff;color:white;}
-.alarm{background:#ff3b30;color:white;}
-
-@keyframes blinkAlarm {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(1.15); }
-  100% { opacity: 1; transform: scale(1); }
+button:hover{
+  transform: translateY(-1px);
+  border-color: rgba(0,255,200,0.6);
+  box-shadow: 0 0 12px rgba(0,255,200,0.25);
 }
 
-.alarmBlink { animation: blinkAlarm 0.8s infinite; }
+.follow{ border-color: rgba(0,180,255,0.3); }
+.watch{ border-color: rgba(255,204,0,0.3); }
+.alarm{ border-color: rgba(255,60,60,0.4); }
 
-@keyframes alarmPulse {
-  0% { transform: scale(0.8); opacity: 0.6; }
-  70% { transform: scale(2.2); opacity: 0.1; }
-  100% { transform: scale(2.6); opacity: 0; }
+/* DEVICE CARD */
+.device{
+  margin-top: 10px;
+  padding: 12px;
+
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(0,255,200,0.08);
+  border-radius: 14px;
+
+  transition: 0.2s;
 }
 
-.alarmRadius{
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  width:80px;
-  height:80px;
-  border-radius:50%;
-  border:2px solid red;
-  background:rgba(255,0,0,0.15);
-  animation: alarmPulse 1.2s infinite;
-  pointer-events:none;
+.device:hover{
+  border-color: rgba(0,255,200,0.25);
+  box-shadow: 0 0 18px rgba(0,255,200,0.08);
 }
+
+/* TEXT */
+.device b{
+  font-size: 15px;
+}
+
+/* CHIPS */
+.chip{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  margin-left:6px;
+  border:1px solid rgba(255,255,255,0.1);
+}
+
+.online{ background:rgba(52,199,89,0.15); }
+.idle{ background:rgba(255,204,0,0.12); }
+.alarmChip{ background:rgba(255,60,60,0.2); }
+
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <b>🚗 GPS Realtime MASTER</b><br>
+  <b>🚗 GPS Neon Dashboard</b><br>
 
   <button onclick="toggleNav()">Nav</button>
-  <button onclick="toggleAlarmSystem()">🔊 System</button>
+  <button onclick="toggleAlarmSystem()">System</button>
 
   <hr>
 
@@ -89,8 +125,7 @@ button{
 
 <script>
 
-/* ================= STATE ================= */
-
+/* STATE */
 const devices = {};
 const markers = {};
 const tracks = {};
@@ -102,133 +137,116 @@ let followId = null;
 let navMode = false;
 
 let alarmEnabled = true;
-let activeAlarmDevice = null;
 
-const alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
-alarmAudio.loop = true;
-
-/* ================= HELPERS ================= */
-
+/* HELPERS */
 function getLastSeenSeconds(ts){
   if(!ts) return "?";
   return Math.max(0, Math.floor((Date.now() - ts) / 1000));
 }
 
 function color(name){
-  const n = (name || "").toLowerCase();
-  if(n.includes("oliver")) return "#3aa0ff";
-  if(n.includes("nicole")) return "#ff4d4d";
-  return "#4dffb5";
+  const n = (name||"").toLowerCase();
+  if(n.includes("oliver")) return "#00e5ff";
+  if(n.includes("nicole")) return "#ff4d6d";
+  return "#00ffb3";
 }
 
 function accuracyColor(acc){
-  if(acc == null) return "white";
-  if(acc <= 5) return "#00ff88";
+  if(acc == null) return "#fff";
+  if(acc <= 5) return "#00ff99";
   if(acc <= 20) return "#ffd60a";
   return "#ff3b30";
 }
 
 function bearing(lat1, lon1, lat2, lon2){
-  const toRad = x => x * Math.PI / 180;
-  const toDeg = x => x * 180 / Math.PI;
+  const toRad = x => x*Math.PI/180;
+  const toDeg = x => x*180/Math.PI;
 
   const φ1 = toRad(lat1);
   const φ2 = toRad(lat2);
-  const Δλ = toRad(lon2 - lon1);
+  const Δλ = toRad(lon2-lon1);
 
-  const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x =
-    Math.cos(φ1) * Math.sin(φ2) -
-    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const y = Math.sin(Δλ)*Math.cos(φ2);
+  const x = Math.cos(φ1)*Math.sin(φ2) -
+            Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
 
   return (toDeg(Math.atan2(y,x)) + 360) % 360;
 }
 
-function distance(a, b){
-  const R = 6371e3;
-  const toRad = x => x * Math.PI / 180;
+function distance(a,b){
+  const R=6371e3;
+  const toRad=x=>x*Math.PI/180;
 
-  const φ1 = toRad(a.lat);
-  const φ2 = toRad(b.lat);
-  const Δφ = toRad(b.lat - a.lat);
-  const Δλ = toRad(b.lon - a.lon);
+  const φ1=toRad(a.lat), φ2=toRad(b.lat);
+  const Δφ=toRad(b.lat-a.lat);
+  const Δλ=toRad(b.lon-a.lon);
 
   const x =
     Math.sin(Δφ/2)**2 +
     Math.cos(φ1)*Math.cos(φ2)*
     Math.sin(Δλ/2)**2;
 
-  return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 
-/* ================= MAP ================= */
+/* MAP */
+const map = L.map("map").setView([47.09,15.42],13);
 
-const map = L.map("map").setView([47.09,15.42], 13);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution:"© OpenStreetMap"
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19
 }).addTo(map);
 
-/* ================= UPDATE ================= */
-
+/* UPDATE */
 function update(d){
 
-  const id = d.deviceId;
-  const lat = Number(d.lat);
-  const lon = Number(d.lon);
-  if(!lat || !lon) return;
+  const id=d.deviceId;
+  const lat=+d.lat, lon=+d.lon;
+  if(!lat||!lon) return;
 
-  const prev = lastPos[id];
-  let angle = heading[id] || 0;
+  const prev=lastPos[id];
+  let angle=heading[id]||0;
 
-  const moving = d.isMotion || (d.speed ?? 0) > 0.5;
+  const moving=d.isMotion||(d.speed??0)>0.5;
 
-  if(prev && moving){
-    angle = bearing(prev.lat, prev.lon, lat, lon);
-    heading[id] = angle;
+  if(prev&&moving){
+    angle=bearing(prev.lat,prev.lon,lat,lon);
+    heading[id]=angle;
   }
 
   if(prev){
-    const dist = distance(prev, {lat, lon});
-    if(dist > 500) return; // spike protection
+    if(distance(prev,{lat,lon})>500) return;
   }
 
-  lastPos[id] = {lat, lon};
-  devices[id] = d;
+  lastPos[id]={lat,lon};
+  devices[id]=d;
 
   if(!markers[id]){
-    markers[id] = L.marker([lat,lon],{
-      icon: icon(d.name, angle, d.isWatched, d.alarmActive)
+    markers[id]=L.marker([lat,lon],{
+      icon:icon(d.name,angle)
     }).addTo(map);
 
-    tracks[id] = L.polyline([], {
-      color: color(d.name),
-      weight: 4,
-      opacity: 0.8
+    tracks[id]=L.polyline([],{
+      color:color(d.name),
+      weight:3
     });
-
-    if(showTracks[id] !== false){
-      tracks[id].addTo(map);
-    }
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name, angle, d.isWatched, d.alarmActive));
+  markers[id].setIcon(icon(d.name,angle));
 
   if(tracks[id]){
-    const prev2 = tracks[id].getLatLngs().slice(-1)[0];
-    if(!prev2 || distance(prev2, {lat,lon}) > 2){
+    const last=tracks[id].getLatLngs().slice(-1)[0];
+    if(!last||distance(last,{lat,lon})>2){
       tracks[id].addLatLng([lat,lon]);
     }
   }
 
-  if(followId === id){
+  if(followId===id){
     if(navMode){
-      const zoom = 17;
-      const point = map.project([lat, lon], zoom);
-      point.y -= 150;
-      map.setView(map.unproject(point, zoom), zoom);
+      const z=17;
+      const p=map.project([lat,lon],z);
+      p.y-=150;
+      map.setView(map.unproject(p,z),z);
     } else {
       map.panTo([lat,lon]);
     }
@@ -237,52 +255,30 @@ function update(d){
   render();
 }
 
-/* ================= ICON ================= */
-
-function icon(name, angle, isWatched, alarmActive){
-
-  const col = color(name);
-  const letter = (name?.[0] || "?").toUpperCase();
+/* ICON */
+function icon(name,angle){
+  const col=color(name);
+  const letter=(name?.[0]||"?").toUpperCase();
 
   return L.divIcon({
     className:"",
-    iconSize:[60,60],
-    iconAnchor:[30,30],
-
+    iconSize:[50,50],
+    iconAnchor:[25,25],
     html:`
-      <div class="${alarmActive ? 'alarmBlink' : ''}"
-        style="position:relative;width:60px;height:60px;
-        display:flex;align-items:center;justify-content:center;">
-
-        ${alarmActive ? `<div class="alarmRadius"></div>` : ""}
-
-        ${isWatched ? `
-          <div style="
-            position:absolute;
-            width:70px;height:70px;
-            border:2px solid gold;
-            border-radius:50%;
-          "></div>
-        ` : ""}
+      <div style="position:relative;width:50px;height:50px;
+      display:flex;align-items:center;justify-content:center;">
 
         <div style="
-          position:absolute;
-          font-size:30px;
-          color:black;
-          transform: rotate(${angle||0}deg);
-        ">▲</div>
-
-        <div style="
-          position:absolute;
-          font-size:28px;
+          font-size:26px;
           color:${col};
-          transform: rotate(${angle||0}deg);
+          transform:rotate(${angle}deg);
+          text-shadow:0 0 10px ${col};
         ">▲</div>
 
         <div style="
           position:absolute;
-          font-size:11px;
-          font-weight:800;
+          font-size:10px;
+          font-weight:bold;
           color:white;
         ">${letter}</div>
 
@@ -291,139 +287,89 @@ function icon(name, angle, isWatched, alarmActive){
   });
 }
 
-/* ================= UI ================= */
-
+/* UI */
 function render(){
+  const el=document.getElementById("list");
+  el.innerHTML="";
 
-  const el = document.getElementById("list");
-  el.innerHTML = "";
+  Object.values(devices).forEach(d=>{
+    const id=d.deviceId;
 
-  Object.values(devices).forEach(d => {
-
-    const speed = (d.speed ?? 0) * 3.6;
-    const id = d.deviceId;
-
-    el.innerHTML += `
+    el.innerHTML+=`
       <div class="device">
         <b>${d.name}</b>
-        <span style="color:#888">(${d.status ?? "unknown"})</span><br>
+        <span class="chip ${d.status}">${d.status||"unknown"}</span>
+        ${d.alarmActive?`<span class="chip alarmChip">ALARM</span>`:""}
+        <br>
 
-        📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
-        🚗 ${speed.toFixed(1)} km/h<br>
-
-        🔋 ${d.battery ?? "-"}%<br>
-
-        🔒 ${d.isLocked ? "LOCKED" : "UNLOCKED"}<br>
-        🚶 ${d.isMotion ? "MOVING" : "STILL"}<br>
-        📶 ${d.isWifi ? "WIFI" : "MOBILE"}<br>
+        📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
+        🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+        🔋 ${d.battery??"-"}%<br>
 
         🎯 <span style="color:${accuracyColor(d.accuracy)}">
-          ${d.accuracy ?? "-"} m
+          ${d.accuracy??"-"} m
         </span><br>
 
         ⏱ ${getLastSeenSeconds(d.timestamp)}s ago<br>
-        🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
 
         <hr>
 
         <button class="follow" onclick="follow('${id}')">Follow</button>
-
-        <button onclick="watch('${id}')">👀 Watch</button>
-        <button onclick="unwatch('${id}')">🚫 Unwatch</button>
-
-        <button class="alarm" onclick="toggleAlarm('${id}')">
-          Alarm
-        </button>
-
-        <button onclick="toggleTrack('${id}')">
-          ${showTracks[id] === false ? "Track ON" : "Track OFF"}
-        </button>
-
-        <button onclick="clearTrack('${id}')">
-          🧹 Clear
-        </button>
+        <button onclick="toggleTrack('${id}')">Track</button>
+        <button onclick="clearTrack('${id}')">Clear</button>
       </div>
     `;
   });
 }
 
-/* ================= ACTIONS ================= */
-
+/* ACTIONS */
 function follow(id){
-  followId = (followId === id ? null : id);
+  followId = followId===id?null:id;
 }
 
 function toggleNav(){
-  navMode = !navMode;
+  navMode=!navMode;
 }
 
 function toggleAlarmSystem(){
-  alarmEnabled = !alarmEnabled;
+  alarmEnabled=!alarmEnabled;
 }
 
-/* ================= SERVER ACTIONS ================= */
-
-function watch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
-}
-
-function unwatch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
-}
-
-function toggleAlarm(id){
-  const d = devices[id];
-  if(!d) return;
-
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
-    method:"POST"
-  });
-}
-
-/* ================= TRACK ================= */
-
+/* TRACK */
 function toggleTrack(id){
-  showTracks[id] = !showTracks[id];
-
-  if(tracks[id]){
-    if(showTracks[id] === false){
-      map.removeLayer(tracks[id]);
-    } else {
-      tracks[id].addTo(map);
-    }
+  showTracks[id]=!showTracks[id];
+  if(showTracks[id]===false){
+    map.removeLayer(tracks[id]);
+  } else {
+    tracks[id].addTo(map);
   }
-
-  render();
 }
 
 function clearTrack(id){
-  if(tracks[id]){
-    tracks[id].setLatLngs([]);
-  }
+  if(tracks[id]) tracks[id].setLatLngs([]);
 }
 
-/* ================= LOAD + WS ================= */
-
+/* LOAD */
 async function load(){
-  const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
-  const data = await r.json();
+  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data=await r.json();
   data.forEach(update);
 }
 load();
 
-function connectWS(){
-  const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+/* WS */
+function connect(){
+  const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-  ws.onmessage = (m) => {
-    const data = JSON.parse(m.data);
-    if(Array.isArray(data)) data.forEach(update);
-    else update(data);
+  ws.onmessage=(m)=>{
+    const d=JSON.parse(m.data);
+    if(Array.isArray(d)) d.forEach(update);
+    else update(d);
   };
 
-  ws.onclose = () => setTimeout(connectWS, 2000);
+  ws.onclose=()=>setTimeout(connect,2000);
 }
-
-connectWS();
+connect();
 
 </script>
 
