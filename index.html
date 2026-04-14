@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Neon Control Center</title>
+<title>GPS Control Center</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -16,11 +16,11 @@ body{
   background:#05070b;
   color:#c9d1d9;
   height:100vh;
-  overflow:hidden;
   display:flex;
+  overflow:hidden;
 }
 
-/* FRAME */
+/* BACKGROUND FRAME */
 .app-frame{
   position:fixed;
   inset:0;
@@ -28,7 +28,7 @@ body{
   z-index:0;
 }
 
-/* LEFT PANEL */
+/* LEFT INFO PANEL */
 #panel{
   width:390px;
 
@@ -39,61 +39,72 @@ body{
   background:rgba(10,15,25,0.55);
   backdrop-filter:blur(16px);
 
-  border:1px solid rgba(0,255,200,0.1);
-  border-radius:16px;
-
+  border-radius:18px;
   padding:14px;
+
+  border:1px solid rgba(0,255,200,0.15);
+
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
+    0 0 25px rgba(0,255,200,0.12),
+    0 0 60px rgba(0,255,200,0.06);
+
   z-index:9999;
 }
 
-/* RIGHT MAP */
+/* MAP RIGHT SIDE */
 #map{
   flex:1;
+
   margin:1.5cm 1.5cm 1.5cm 1cm;
-  border-radius:16px;
+
+  border-radius:18px;
   overflow:hidden;
+
   position:relative;
   z-index:1;
+
+  /* 🌟 SOFT EDGE GLOW */
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.05),
+    0 0 40px rgba(0,255,200,0.08),
+    0 0 80px rgba(0,0,0,0.6);
 }
 
-/* VIGNETTE */
-.map-vignette{
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  z-index:999;
-
-  background:
-    radial-gradient(
-      circle at center,
-      rgba(0,0,0,0) 40%,
-      rgba(0,0,0,0.25) 60%,
-      rgba(0,0,0,0.55) 80%,
-      rgba(0,0,0,0.85) 100%
-    );
-}
-
-/* DEVICE */
+/* DEVICE CARD */
 .device{
   margin-top:10px;
   padding:12px;
+
   background:rgba(255,255,255,0.03);
-  border:1px solid rgba(0,255,200,0.08);
   border-radius:14px;
+
+  border:1px solid rgba(0,255,200,0.08);
+
+  transition:0.2s;
 }
 
-.device b{color:#e6edf3;}
+.device:hover{
+  border-color:rgba(0,255,200,0.25);
+  box-shadow:0 0 20px rgba(0,255,200,0.08);
+}
+
+.device b{
+  color:#e6edf3;
+}
 
 /* BUTTONS */
 button{
   margin:3px 2px;
   padding:6px 10px;
   font-size:12px;
-  border-radius:10px;
 
+  border-radius:10px;
   border:1px solid rgba(0,255,200,0.15);
+
   background:rgba(10,20,30,0.6);
   color:#c9d1d9;
+
   cursor:pointer;
   transition:0.2s;
 }
@@ -136,7 +147,6 @@ button:hover{
 </div>
 
 <div id="map"></div>
-<div class="map-vignette"></div>
 
 <script>
 
@@ -201,7 +211,7 @@ function icon(name){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+      <div style="display:flex;align-items:center;justify-content:center;">
         <div style="
           font-size:26px;
           color:${col};
@@ -281,7 +291,6 @@ function clearTrack(id){
   if(tracks[id]) tracks[id].setLatLngs([]);
 }
 
-/* FULLSCREEN */
 function toggleFullscreen(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
@@ -290,7 +299,7 @@ function toggleFullscreen(){
   }
 }
 
-/* LOAD + AUTO FIT ALL DEVICES */
+/* LOAD + AUTO FIT ALL */
 async function load(){
   const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
   const data=await r.json();
