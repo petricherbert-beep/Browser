@@ -29,22 +29,28 @@ body{
   z-index:0;
 }
 
+/* SHARED GLOW */
+.glow-box{
+  backdrop-filter:blur(10px);
+  border-radius:18px;
+  border:1px solid rgba(0,255,200,0.12);
+
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
+    0 0 20px rgba(0,255,200,0.12),
+    0 0 50px rgba(0,255,200,0.08);
+}
+
 /* PANEL */
 #panel{
   width:390px;
   margin:1.5cm 0 1.5cm 1.5cm;
   overflow:auto;
   background:rgba(10,15,25,0.55);
-  backdrop-filter:blur(16px);
-  border-radius:18px;
   padding:14px;
-  border:1px solid rgba(0,255,200,0.15);
-  box-shadow:
-    0 0 0 1px rgba(0,0,0,0.6),
-    0 0 25px rgba(0,255,200,0.12),
-    0 0 60px rgba(0,255,200,0.06);
   z-index:9999;
 }
+#panel.glow-box{}
 
 /* MAP */
 #map{
@@ -56,4 +62,303 @@ body{
   z-index:1;
 
   box-shadow:
-    0 
+    0 0 0 1px rgba(255,255,255,0.05),
+    0 0 25px rgba(0,255,200,0.12),
+    0 0 60px rgba(0,255,200,0.08);
+}
+
+/* DEVICE */
+.device{
+  margin-top:10px;
+  padding:12px;
+  background:rgba(255,255,255,0.03);
+  border-radius:14px;
+  border:1px solid rgba(0,255,200,0.08);
+}
+
+.device:hover{
+  border-color:rgba(0,255,200,0.25);
+  box-shadow:0 0 12px rgba(0,255,200,0.08);
+}
+
+.device b{color:#e6edf3;}
+
+/* BUTTONS */
+button{
+  margin:3px 2px;
+  padding:6px 10px;
+  font-size:12px;
+  border-radius:10px;
+  border:1px solid rgba(0,255,200,0.15);
+  background:rgba(10,20,30,0.6);
+  color:#c9d1d9;
+  cursor:pointer;
+  transition:0.2s;
+}
+
+button:hover{
+  transform:translateY(-1px);
+  border-color:rgba(0,255,200,0.5);
+}
+
+/* ACTIVE BUTTON GLOW (STRONG) */
+.active-follow,
+.active-track,
+.active-alarm,
+.active-watch{
+  border-width:1px;
+  transform:translateY(-1px);
+
+  box-shadow:
+    0 0 10px currentColor,
+    0 0 20px currentColor,
+    0 0 40px currentColor;
+}
+
+/* COLORS PER STATE */
+.active-follow{
+  color:#3aa0ff;
+  border-color:#3aa0ff;
+}
+
+.active-track{
+  color:#00ffb3;
+  border-color:#00ffb3;
+}
+
+.active-alarm{
+  color:#ff4d4d;
+  border-color:#ff4d4d;
+}
+
+.active-watch{
+  color:#ffd84d;
+  border-color:#ffd84d;
+}
+
+/* CHIPS */
+.chip{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  margin-left:6px;
+  border:1px solid rgba(255,255,255,0.1);
+}
+
+.online{color:#00ff7b;border-color:#00ff7b55;}
+.offline{color:#ff3b3b;border-color:#ff3b3b55;}
+.alarmChip{color:#ff3b3b;border-color:#ff3b3b55;}
+</style>
+
+</head>
+
+<body>
+
+<div class="app-frame"></div>
+
+<div id="panel" class="glow-box">
+  <b>🚗 GPS Control Center</b><br>
+  <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+  <hr>
+  <div id="list"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+const devices={}, markers={}, tracks={}, trackState={}, followState={};
+let followId=null;
+
+/* WATCH STATE (NEW) */
+const watchState={};
+
+function color(name){
+  const n=(name||"").toLowerCase();
+  if(n.includes("oliver")) return "#3aa0ff";
+  if(n.includes("nicole")) return "#ff4d4d";
+  return "#00ffb3";
+}
+
+const map=L.map("map").setView([47.09,15.42],13);
+
+/* BACK TO ORIGINAL MAP */
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19
+}).addTo(map);
+
+function update(d){
+  const id=d.deviceId;
+  const lat=+d.lat, lon=+d.lon;
+  if(!lat||!lon) return;
+
+  devices[id]=d;
+  watchState[id]=d.isWatched;
+
+  if(!markers[id]){
+    markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
+
+    tracks[id]=L.polyline([],{
+      color:color(d.name),
+      weight:3
+    }).addTo(map);
+  }
+
+  markers[id].setLatLng([lat,lon]);
+  tracks[id].addLatLng([lat,lon]);
+
+  if(followState[id]){
+    map.panTo([lat,lon]);
+  }
+
+  render();
+}
+
+function icon(name){
+  const col=color(name);
+  const letter=(name?.[0]||"?").toUpperCase();
+
+  return L.divIcon({
+    className:"",
+    iconSize:[40,40],
+    iconAnchor:[20,20],
+    html:`
+      <div style="display:flex;align-items:center;justify-content:center;">
+        <div style="
+          font-size:26px;
+          color:${col};
+          text-shadow:0 0 10px ${col};
+        ">▲</div>
+        <div style="
+          position:absolute;
+          font-size:10px;
+          color:white;
+          font-weight:700;
+        ">${letter}</div>
+      </div>
+    `
+  });
+}
+
+function follow(id){
+  followState[id]=!followState[id];
+  followId=followState[id]?id:null;
+}
+
+function toggleTrack(id){
+  trackState[id]=!trackState[id];
+  if(tracks[id]){
+    trackState[id]?map.addLayer(tracks[id]):map.removeLayer(tracks[id]);
+  }
+}
+
+function watch(id){
+  watchState[id]=true;
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+  render();
+}
+
+function unwatch(id){
+  watchState[id]=false;
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+  render();
+}
+
+function clearTrack(id){
+  if(tracks[id]) tracks[id].setLatLngs([]);
+}
+
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
+}
+
+function render(){
+  const el=document.getElementById("list");
+  el.innerHTML="";
+
+  Object.values(devices).forEach(d=>{
+    const id=d.deviceId;
+
+    el.innerHTML+=`
+      <div class="device">
+        <b>${d.name}</b>
+        <span class="chip ${d.status==='online'?'online':'offline'}">
+          ${d.status==='online'?'ONLINE':'OFFLINE'}
+        </span>
+        ${d.alarmActive?`<span class="chip alarmChip">ALARM</span>`:""}
+        <br><br>
+        📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
+        🚶 <span style="color:${d.isMotion?'#00ff99':'#ff4d4d'}">
+          ${d.isMotion?"MOVING":"STILL"}
+        </span><br>
+        🔋 ${d.battery??"-"}%<br>
+        🎯 ${d.accuracy??"-"} m<br>
+        📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
+        🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
+        👀 ${watchState[id]?"WATCHED":"NOT WATCHED"}<br>
+        <hr>
+
+        <button class="${followState[id]?'active-follow':''}" onclick="follow('${id}')">
+          🎯 FOLLOW
+        </button>
+
+        <button class="${trackState[id]?'active-track':''}" onclick="toggleTrack('${id}')">
+          📍 TRACK
+        </button>
+
+        <button class="${watchState[id]?'active-watch':''}" onclick="watch('${id}')">
+          👀 WATCH
+        </button>
+
+        <button onclick="unwatch('${id}')">
+          🚫 UNWATCH
+        </button>
+
+        <button class="${d.alarmActive?'active-alarm':''}" onclick="toggleAlarm('${id}')">
+          🚨 ALARM
+        </button>
+
+        <button onclick="clearTrack('${id}')">CLEAR</button>
+      </div>
+    `;
+  });
+}
+
+function toggleAlarm(id){
+  const d=devices[id];
+  if(!d) return;
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
+    method:"POST"
+  });
+}
+
+async function load(){
+  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data=await r.json();
+  data.forEach(update);
+
+  setTimeout(()=>{
+    const group=Object.values(markers);
+    if(group.length){
+      const fg=L.featureGroup(group);
+      map.fitBounds(fg.getBounds().pad(0.3));
+    }
+  },400);
+}
+load();
+
+const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
+
+ws.onmessage=(m)=>{
+  const d=JSON.parse(m.data);
+  if(Array.isArray(d)) d.forEach(update);
+  else update(d);
+};
+</script>
+
+</body>
+</html>
