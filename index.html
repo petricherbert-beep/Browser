@@ -52,8 +52,22 @@ body{
   border-radius:20px;
   overflow:hidden;
   position:relative;
+  z-index:1;
 
-  animation: mapGlowPulse 5s ease-in-out infinite;
+  /* 🌑 BEST OSM LOOK */
+  filter:
+    contrast(0.82)
+    brightness(0.92)
+    saturate(0.85);
+}
+
+/* 🌑 DARK OVERLAY */
+.map-overlay{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.14);
+  pointer-events:none;
+  z-index:999;
 }
 
 @keyframes mapGlowPulse {
@@ -72,6 +86,10 @@ body{
       0 0 25px rgba(0,255,200,0.12),
       0 0 60px rgba(0,255,200,0.18);
   }
+}
+
+#map{
+  animation: mapGlowPulse 5s ease-in-out infinite;
 }
 
 .device{
@@ -130,6 +148,9 @@ button:hover{
 
 <div id="map"></div>
 
+<!-- 🌑 Overlay für Map -->
+<div class="map-overlay"></div>
+
 <script>
 const state = { devices: {} };
 const markers = {};
@@ -149,7 +170,7 @@ function color(name){
   return "#00ffb3";
 }
 
-/* ICON (mit schwarzem Rand) */
+/* ICON (schwarzer Rand) */
 function icon(name){
   const col=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
@@ -212,8 +233,7 @@ function update(d){
 
     tracks[id] = L.polyline([], {
       color: color(d.name),
-      weight: 4,
-    opacity: 0.25
+      weight: 3
     }).addTo(map);
   }
 
@@ -297,7 +317,7 @@ function toggleFullscreen(){
   }
 }
 
-/* RENDER (vollständig + sicher) */
+/* RENDER */
 function render(){
   const el = document.getElementById("list");
   el.innerHTML = "";
