@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Realtime Pro - MASTER</title>
+<title>GPS Realtime MASTER</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -14,7 +14,7 @@ body { margin:0; font-family:system-ui; background:#0b0f14; }
 #panel{
   position:absolute;
   top:10px; left:10px;
-  width:380px;
+  width:390px;
   max-height:90vh;
   overflow:auto;
   background:rgba(20,20,20,0.92);
@@ -48,9 +48,7 @@ button{
   100% { opacity: 1; transform: scale(1); }
 }
 
-.alarmBlink {
-  animation: blinkAlarm 0.8s infinite;
-}
+.alarmBlink { animation: blinkAlarm 0.8s infinite; }
 
 @keyframes alarmPulse {
   0% { transform: scale(0.8); opacity: 0.6; }
@@ -58,7 +56,7 @@ button{
   100% { transform: scale(2.6); opacity: 0; }
 }
 
-.alarmRadius {
+.alarmRadius{
   position:absolute;
   top:50%;
   left:50%;
@@ -70,7 +68,6 @@ button{
   background:rgba(255,0,0,0.15);
   animation: alarmPulse 1.2s infinite;
   pointer-events:none;
-  z-index:0;
 }
 </style>
 </head>
@@ -118,7 +115,7 @@ function getLastSeenSeconds(ts){
 }
 
 function color(name){
-  const n=(name||"").toLowerCase();
+  const n = (name || "").toLowerCase();
   if(n.includes("oliver")) return "#3aa0ff";
   if(n.includes("nicole")) return "#ff4d4d";
   return "#4dffb5";
@@ -149,7 +146,7 @@ function bearing(lat1, lon1, lat2, lon2){
 
 function distance(a, b){
   const R = 6371e3;
-  const toRad = x => x * Math.PI/180;
+  const toRad = x => x * Math.PI / 180;
 
   const φ1 = toRad(a.lat);
   const φ2 = toRad(b.lat);
@@ -162,6 +159,82 @@ function distance(a, b){
     Math.sin(Δλ/2)**2;
 
   return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+/* ================= MAP ================= */
+
+const map = L.map("map").setView([47.09,15.42], 13);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution:"© OpenStreetMap"
+}).addTo(map);
+
+/* ================= UPDATE ================= */
+
+function update(d){
+
+  const id = d.deviceId;
+  const lat = Number(d.lat);
+  const lon = Number(d.lon);
+  if(!lat || !lon) return;
+
+  const prev = lastPos[id];
+  let angle = heading[id] || 0;
+
+  const moving = d.isMotion || (d.speed ?? 0) > 0.5;
+
+  if(prev && moving){
+    angle = bearing(prev.lat, prev.lon, lat, lon);
+    heading[id] = angle;
+  }
+
+  if(prev){
+    const dist = distance(prev, {lat, lon});
+    if(dist > 500) return; // spike protection
+  }
+
+  lastPos[id] = {lat, lon};
+  devices[id] = d;
+
+  if(!markers[id]){
+    markers[id] = L.marker([lat,lon],{
+      icon: icon(d.name, angle, d.isWatched, d.alarmActive)
+    }).addTo(map);
+
+    tracks[id] = L.polyline([], {
+      color: color(d.name),
+      weight: 4,
+      opacity: 0.8
+    });
+
+    if(showTracks[id] !== false){
+      tracks[id].addTo(map);
+    }
+  }
+
+  markers[id].setLatLng([lat,lon]);
+  markers[id].setIcon(icon(d.name, angle, d.isWatched, d.alarmActive));
+
+  if(tracks[id]){
+    const prev2 = tracks[id].getLatLngs().slice(-1)[0];
+    if(!prev2 || distance(prev2, {lat,lon}) > 2){
+      tracks[id].addLatLng([lat,lon]);
+    }
+  }
+
+  if(followId === id){
+    if(navMode){
+      const zoom = 17;
+      const point = map.project([lat, lon], zoom);
+      point.y -= 150;
+      map.setView(map.unproject(point, zoom), zoom);
+    } else {
+      map.panTo([lat,lon]);
+    }
+  }
+
+  render();
 }
 
 /* ================= ICON ================= */
@@ -218,82 +291,6 @@ function icon(name, angle, isWatched, alarmActive){
   });
 }
 
-/* ================= MAP ================= */
-
-const map = L.map("map").setView([47.09,15.42],13);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution:"© OpenStreetMap"
-}).addTo(map);
-
-/* ================= UPDATE ================= */
-
-function update(d){
-
-  const id = d.deviceId;
-  const lat = Number(d.lat);
-  const lon = Number(d.lon);
-  if(!lat || !lon) return;
-
-  const prev = lastPos[id];
-  let angle = heading[id] || 0;
-
-  const moving = d.isMotion || (d.speed ?? 0) > 0.5;
-
-  if(prev && moving){
-    angle = bearing(prev.lat, prev.lon, lat, lon);
-    heading[id] = angle;
-  }
-
-  if(prev){
-    const dist = distance(prev, {lat,lon});
-    if(dist > 500) return; // spike protection
-  }
-
-  lastPos[id] = {lat,lon};
-  devices[id] = d;
-
-  if(!markers[id]){
-    markers[id] = L.marker([lat,lon],{
-      icon: icon(d.name, angle, d.isWatched, d.alarmActive)
-    }).addTo(map);
-
-    tracks[id] = L.polyline([], {
-      color: color(d.name),
-      weight: 4,
-      opacity: 0.8
-    });
-
-    if(showTracks[id] !== false){
-      tracks[id].addTo(map);
-    }
-  }
-
-  markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name, angle, d.isWatched, d.alarmActive));
-
-  if(!tracks[id]) return;
-
-  const prev2 = tracks[id].getLatLngs().slice(-1)[0];
-  if(!prev2 || distance(prev2, {lat,lon}) > 2){
-    tracks[id].addLatLng([lat,lon]);
-  }
-
-  if(followId === id){
-    if(navMode){
-      const zoom = 17;
-      const point = map.project([lat, lon], zoom);
-      point.y -= 150;
-      map.setView(map.unproject(point, zoom), zoom);
-    } else {
-      map.panTo([lat,lon]);
-    }
-  }
-
-  render();
-}
-
 /* ================= UI ================= */
 
 function render(){
@@ -304,10 +301,12 @@ function render(){
   Object.values(devices).forEach(d => {
 
     const speed = (d.speed ?? 0) * 3.6;
+    const id = d.deviceId;
 
     el.innerHTML += `
       <div class="device">
-        <b>${d.name}</b><br>
+        <b>${d.name}</b>
+        <span style="color:#888">(${d.status ?? "unknown"})</span><br>
 
         📍 ${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}<br>
         🚗 ${speed.toFixed(1)} km/h<br>
@@ -316,23 +315,32 @@ function render(){
 
         🔒 ${d.isLocked ? "LOCKED" : "UNLOCKED"}<br>
         🚶 ${d.isMotion ? "MOVING" : "STILL"}<br>
+        📶 ${d.isWifi ? "WIFI" : "MOBILE"}<br>
 
         🎯 <span style="color:${accuracyColor(d.accuracy)}">
           ${d.accuracy ?? "-"} m
         </span><br>
 
         ⏱ ${getLastSeenSeconds(d.timestamp)}s ago<br>
+        🚨 ${d.alarmActive ? "ALARM" : "OK"}<br>
 
-        <button class="follow" onclick="follow('${d.deviceId}')">
-          Follow
+        <hr>
+
+        <button class="follow" onclick="follow('${id}')">Follow</button>
+
+        <button onclick="watch('${id}')">👀 Watch</button>
+        <button onclick="unwatch('${id}')">🚫 Unwatch</button>
+
+        <button class="alarm" onclick="toggleAlarm('${id}')">
+          Alarm
         </button>
 
-        <button onclick="toggleTrack('${d.deviceId}')">
-          Track
+        <button onclick="toggleTrack('${id}')">
+          ${showTracks[id] === false ? "Track ON" : "Track OFF"}
         </button>
 
-        <button onclick="clearTrack('${d.deviceId}')">
-          Clear
+        <button onclick="clearTrack('${id}')">
+          🧹 Clear
         </button>
       </div>
     `;
@@ -351,6 +359,25 @@ function toggleNav(){
 
 function toggleAlarmSystem(){
   alarmEnabled = !alarmEnabled;
+}
+
+/* ================= SERVER ACTIONS ================= */
+
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+}
+
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+}
+
+function toggleAlarm(id){
+  const d = devices[id];
+  if(!d) return;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
+    method:"POST"
+  });
 }
 
 /* ================= TRACK ================= */
