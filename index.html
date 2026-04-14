@@ -24,29 +24,23 @@ body{
 /* PANEL */
 #panel{
   width:390px;
-  margin:1.5cm 0 1.5cm 1.5cm;
+  margin:1.5cm;
   overflow:auto;
   background:rgba(10,15,25,0.55);
   backdrop-filter:blur(16px);
   border-radius:18px;
   padding:14px;
   border:1px solid rgba(0,255,200,0.15);
-  box-shadow:
-    0 0 0 1px rgba(0,0,0,0.6),
-    0 0 25px rgba(0,255,200,0.12);
+  box-shadow:0 0 25px rgba(0,255,200,0.12);
 }
 
 /* MAP */
 #map{
   flex:1;
-  margin:1.5cm;
+  margin:1.5cm 1.5cm 1.5cm 0;
   border-radius:20px;
   overflow:hidden;
-
-  box-shadow:
-    0 0 30px rgba(0,255,200,0.15),
-    0 0 80px rgba(0,255,200,0.08);
-
+  box-shadow:0 0 30px rgba(0,255,200,0.15);
   transition:0.3s;
 }
 
@@ -71,7 +65,12 @@ button{
   cursor:pointer;
 }
 
-/* STATES */
+.active-watch{
+  color:#ffd84d;
+  border-color:#ffd84d;
+  box-shadow:0 0 15px #ffd84d;
+}
+
 .active-alarm{
   color:#ff4d4d;
   border-color:#ff4d4d;
@@ -79,15 +78,9 @@ button{
 }
 
 @keyframes alarmPulse{
-  0%{ box-shadow:0 0 10px #ff4d4d; }
+  0%{ box-shadow:0 0 8px #ff4d4d; }
   50%{ box-shadow:0 0 25px #ff4d4d; }
-  100%{ box-shadow:0 0 10px #ff4d4d; }
-}
-
-.active-watch{
-  color:#ffd84d;
-  border-color:#ffd84d;
-  box-shadow:0 0 15px #ffd84d;
+  100%{ box-shadow:0 0 8px #ff4d4d; }
 }
 
 /* MARKER PULSE */
@@ -101,7 +94,7 @@ button{
   100%{ transform:scale(1); filter:drop-shadow(0 0 5px red); }
 }
 
-.device{margin-top:10px;}
+.device{margin-top:10px;padding:10px;}
 </style>
 
 </head>
@@ -109,14 +102,16 @@ button{
 <body>
 
 <div id="panel">
-<b>🚗 GPS Control Center</b><br><hr>
-<div id="list"></div>
+  <b>🚗 GPS Control Center</b><br><hr>
+  <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+  <div id="list"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
-const devices={}, markers={}, tracks={}, trackState={}, followState={}, watchState={};
+const devices={}, markers={}, tracks={};
+const trackState={}, followState={}, watchState={};
 
 const map=L.map("map").setView([47.09,15.42],13);
 
@@ -131,14 +126,12 @@ function icon(d){
 
   return L.divIcon({
     className:"",
-    html:`
-      <div class="${alarmClass}" style="font-size:26px;color:${col};">
-        ▲
-      </div>
-      <div style="position:absolute;font-size:10px;color:white;">${letter}</div>
-    `,
     iconSize:[40,40],
-    iconAnchor:[20,20]
+    iconAnchor:[20,20],
+    html:`
+      <div class="${alarmClass}" style="font-size:26px;color:${col};text-shadow:0 0 10px ${col};">▲</div>
+      <div style="position:absolute;font-size:10px;color:white;">${letter}</div>
+    `
   });
 }
 
@@ -152,10 +145,19 @@ function update(d){
 
   if(!markers[id]){
     markers[id]=L.marker([d.lat,d.lon],{icon:icon(d)}).addTo(map);
+
+    tracks[id]=L.polyline([],{
+      color:"#00ffb3",
+      weight:3
+    }).addTo(map);
   }
 
   markers[id].setLatLng([d.lat,d.lon]);
   markers[id].setIcon(icon(d));
+
+  if(followState[id]){
+    map.panTo([d.lat,d.lon]);
+  }
 
   updateMapGlow();
   render();
@@ -171,19 +173,57 @@ function updateMapGlow(){
   document.getElementById("map").classList.toggle("map-active",anyActive);
 }
 
-/* TOGGLES */
-function toggleWatch(id){
-  const active=!watchState[id];
-  watchState[id]=active;
+/* FOLLOW */
+function follow(id){
+  followState[id]=!followState[id];
+  updateMapGlow();
+}
 
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${active?'watch':'unwatch'}`,{method:"POST"});
+/* TRACK */
+function toggleTrack(id){
+  trackState[id]=!trackState[id];
+
+  if(tracks[id]){
+    trackState[id]?map.addLayer(tracks[id]):map.removeLayer(tracks[id]);
+  }
+
+  updateMapGlow();
+}
+
+/* WATCH TOGGLE */
+function toggleWatch(id){
+  watchState[id]=!watchState[id];
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${watchState[id]?'watch':'unwatch'}`,{
+    method:"POST"
+  });
+
   updateMapGlow();
   render();
 }
 
+/* ALARM TOGGLE */
 function toggleAlarm(id){
   const d=devices[id];
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{method:"POST"});
+  if(!d) return;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${!d.alarmActive}`,{
+    method:"POST"
+  });
+}
+
+/* CLEAR */
+function clearTrack(id){
+  if(tracks[id]) tracks[id].setLatLngs([]);
+}
+
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
 }
 
 /* RENDER */
@@ -198,17 +238,30 @@ function render(){
       <div class="device">
         <b>${d.name}</b><br>
 
-        👀 ${watchState[id]?"WATCHED":"NOT WATCHED"}<br>
+        📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
+        🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+
+        <hr>
+
+        <button onclick="follow('${id}')">
+          🎯 FOLLOW ${followState[id]?"ON":"OFF"}
+        </button>
+
+        <button onclick="toggleTrack('${id}')">
+          📍 TRACK ${trackState[id]?"ON":"OFF"}
+        </button>
 
         <button class="${watchState[id]?'active-watch':''}"
           onclick="toggleWatch('${id}')">
-          👀 WATCH
+          👀 WATCH ${watchState[id]?"ON":"OFF"}
         </button>
 
         <button class="${d.alarmActive?'active-alarm':''}"
           onclick="toggleAlarm('${id}')">
           🚨 ALARM
         </button>
+
+        <button onclick="clearTrack('${id}')">CLEAR</button>
       </div>
     `;
   });
