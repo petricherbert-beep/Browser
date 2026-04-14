@@ -27,6 +27,16 @@ body{
   z-index:0;
 }
 
+.glow-box{
+  backdrop-filter:blur(10px);
+  border-radius:18px;
+  border:1px solid rgba(0,255,200,0.12);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
+    0 0 20px rgba(0,255,200,0.12),
+    0 0 50px rgba(0,255,200,0.08);
+}
+
 #panel{
   width:390px;
   margin:1.5cm 0 1.5cm 1.5cm;
@@ -34,8 +44,6 @@ body{
   background:rgba(10,15,25,0.55);
   padding:14px;
   z-index:9999;
-  border-radius:18px;
-  border:1px solid rgba(0,255,200,0.12);
 }
 
 #map{
@@ -44,9 +52,9 @@ body{
   border-radius:20px;
   overflow:hidden;
   position:relative;
+  z-index:1;
 }
 
-/* DEVICE */
 .device{
   margin-top:10px;
   padding:12px;
@@ -55,66 +63,15 @@ body{
   border:1px solid rgba(0,255,200,0.08);
 }
 
+.device:hover{
+  border-color:rgba(0,255,200,0.25);
+  box-shadow:0 0 12px rgba(0,255,200,0.08);
+}
+
 .device b{color:#e6edf3;}
 
-.chip{
-  display:inline-block;
-  padding:2px 8px;
-  border-radius:999px;
-  font-size:11px;
-  margin-left:6px;
-}
-
-.online{color:#00ff7b;border:1px solid #00ff7b55;}
-.offline{color:#ff3b3b;border:1px solid #ff3b3b55;}
-.alarmChip{color:#ff3b3b;border:1px solid #ff3b3b55;}
-
-/* TOGGLES */
-.toggle{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  margin:6px 0;
-  padding:8px 10px;
-  border-radius:12px;
-  background:rgba(255,255,255,0.03);
-  border:1px solid rgba(0,255,200,0.08);
-}
-
-.toggle input{
-  appearance:none;
-  width:40px;
-  height:20px;
-  background:#222;
-  border-radius:20px;
-  position:relative;
-  cursor:pointer;
-  transition:0.2s;
-}
-
-.toggle input:checked{
-  background:#00ffb3;
-  box-shadow:0 0 10px #00ffb3;
-}
-
-.toggle input::before{
-  content:"";
-  position:absolute;
-  width:16px;
-  height:16px;
-  top:2px;
-  left:2px;
-  background:white;
-  border-radius:50%;
-  transition:0.2s;
-}
-
-.toggle input:checked::before{
-  left:22px;
-}
-
 button{
-  margin-top:8px;
+  margin:3px 2px;
   padding:6px 10px;
   font-size:12px;
   border-radius:10px;
@@ -122,16 +79,56 @@ button{
   background:rgba(10,20,30,0.6);
   color:#c9d1d9;
   cursor:pointer;
+  transition:0.2s;
 }
+
+button:hover{
+  transform:translateY(-1px);
+  border-color:rgba(0,255,200,0.5);
+}
+
+/* ACTIVE STATES */
+.active-follow{
+  color:#3aa0ff;
+  border-color:#3aa0ff;
+  box-shadow:0 0 10px #3aa0ff;
+}
+
+.active-track{
+  color:#00ffb3;
+  border-color:#00ffb3;
+  box-shadow:0 0 10px #00ffb3;
+}
+
+.active-alarm{
+  color:#ff4d4d;
+  border-color:#ff4d4d;
+  box-shadow:0 0 10px #ff4d4d;
+}
+
+.chip{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  margin-left:6px;
+  border:1px solid rgba(255,255,255,0.1);
+}
+
+.online{color:#00ff7b;border-color:#00ff7b55;}
+.offline{color:#ff3b3b;border-color:#ff3b3b55;}
+.alarmChip{color:#ff3b3b;border-color:#ff3b3b55;}
 </style>
+
 </head>
 
 <body>
 
 <div class="app-frame"></div>
 
-<div id="panel">
-  <b>🚗 GPS Control Center</b>
+<div id="panel" class="glow-box">
+  <b>🚗 GPS Control Center</b><br>
+  <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
   <hr>
   <div id="list"></div>
 </div>
@@ -139,15 +136,10 @@ button{
 <div id="map"></div>
 
 <script>
-const devices = {};
-const markers = {};
-const tracks = {};
+const devices={}, markers={}, tracks={};
+const followState={}, trackState={}, watchState={};
 
-const followState = {};
-const trackState = {};
-const watchState = {};
-
-const map = L.map("map").setView([47.09,15.42],13);
+const map=L.map("map").setView([47.09,15.42],13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
   maxZoom:19
@@ -179,84 +171,98 @@ function icon(name){
   });
 }
 
-/* UPDATE DEVICE */
+/* UPDATE */
 function update(d){
-  const id = d.deviceId;
-  const lat = +d.lat, lon = +d.lon;
-  if(!lat || !lon) return;
+  const id=d.deviceId;
+  const lat=+d.lat, lon=+d.lon;
+  if(!lat||!lon) return;
 
-  devices[id] = d;
-  watchState[id] = d.isWatched;
+  devices[id]=d;
+  watchState[id]=d.isWatched;
 
   if(!markers[id]){
-    markers[id] = L.marker([lat,lon], {icon: icon(d.name)}).addTo(map);
+    markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
 
-    tracks[id] = L.polyline([], {
-      color: color(d.name),
-      weight: 3
+    tracks[id]=L.polyline([],{
+      color:color(d.name),
+      weight:3
     }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-
-  const pts = tracks[id].getLatLngs();
-  pts.push([lat,lon]);
-  if(pts.length > 500) pts.shift();
-  tracks[id].setLatLngs(pts);
+  tracks[id].addLatLng([lat,lon]);
 
   if(followState[id]){
-    map.setView([lat,lon], map.getZoom(), {animate:false});
+    map.panTo([lat,lon]);
   }
 
   render();
 }
 
-/* ACTIONS */
+/* FOLLOW */
 function follow(id){
-  followState[id] = !followState[id];
+  followState[id]=!followState[id];
 }
 
+/* TRACK */
 function toggleTrack(id){
-  trackState[id] = !trackState[id];
+  trackState[id]=!trackState[id];
   if(tracks[id]){
-    trackState[id] ? map.addLayer(tracks[id]) : map.removeLayer(tracks[id]);
+    trackState[id]
+      ? map.addLayer(tracks[id])
+      : map.removeLayer(tracks[id]);
   }
 }
 
-function watchToggle(id){
-  watchState[id] = !watchState[id];
-
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${watchState[id] ? "watch" : "unwatch"}`,{
-    method:"POST"
-  }).catch(()=>{});
+/* WATCH */
+function watch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
+  watchState[id]=true;
 }
 
+function unwatch(id){
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
+  watchState[id]=false;
+}
+
+/* 🔥 FIX: ALARM TOGGLE (AN + AUS sauber) */
 function toggleAlarm(id){
-  const d = devices[id];
+  const d=devices[id];
   if(!d) return;
 
-  d.alarmActive = !d.alarmActive;
+  const newState=!d.alarmActive;
 
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${d.alarmActive}`,{
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${newState}`,{
     method:"POST"
-  }).catch(()=>{});
+  });
 
+  d.alarmActive=newState;
   render();
 }
 
+/* CLEAR TRACK */
 function clearTrack(id){
   if(tracks[id]) tracks[id].setLatLngs([]);
 }
 
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
+}
+
 /* RENDER */
 function render(){
-  const el = document.getElementById("list");
-  el.innerHTML = "";
+  const el=document.getElementById("list");
+  el.innerHTML="";
 
   Object.values(devices).forEach(d=>{
-    const id = d.deviceId;
+    const id=d.deviceId;
 
-    el.innerHTML += `
+    el.innerHTML+=`
       <div class="device">
         <b>${d.name}</b>
 
@@ -264,37 +270,37 @@ function render(){
           ${d.status==='online'?'ONLINE':'OFFLINE'}
         </span>
 
-        ${d.alarmActive ? `<span class="chip alarmChip">ALARM</span>` : ""}
+        ${d.alarmActive?`<span class="chip alarmChip">ALARM</span>`:""}
 
         <br><br>
 
         📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}<br>
-        🚶 ${d.isMotion ? "MOVING" : "STILL"}<br>
-        🔋 ${d.battery ?? "-"}%<br>
+        🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+        🔋 ${d.battery??"-"}%<br>
 
         <hr>
 
-        <label class="toggle">
-          <span>FOLLOW</span>
-          <input type="checkbox" onchange="follow('${id}')" ${followState[id] ? "checked" : ""}>
-        </label>
+        <button class="${followState[id]?'active-follow':''}" onclick="follow('${id}')">
+          🎯 FOLLOW
+        </button>
 
-        <label class="toggle">
-          <span>TRACK</span>
-          <input type="checkbox" onchange="toggleTrack('${id}')" ${trackState[id] ? "checked" : ""}>
-        </label>
+        <button class="${trackState[id]?'active-track':''}" onclick="toggleTrack('${id}')">
+          📍 TRACK
+        </button>
 
-        <label class="toggle">
-          <span>WATCH</span>
-          <input type="checkbox" onchange="watchToggle('${id}')" ${watchState[id] ? "checked" : ""}>
-        </label>
+        <button onclick="watch('${id}')">
+          👀 WATCH
+        </button>
 
-        <label class="toggle">
-          <span>ALARM</span>
-          <input type="checkbox" onchange="toggleAlarm('${id}')" ${d.alarmActive ? "checked" : ""}>
-        </label>
+        <button onclick="unwatch('${id}')">
+          🚫 UNWATCH
+        </button>
 
-        <button onclick="clearTrack('${id}')">CLEAR TRACK</button>
+        <button class="${d.alarmActive?'active-alarm':''}" onclick="toggleAlarm('${id}')">
+          🚨 ALARM
+        </button>
+
+        <button onclick="clearTrack('${id}')">CLEAR</button>
       </div>
     `;
   });
@@ -302,22 +308,18 @@ function render(){
 
 /* LOAD */
 async function load(){
-  try{
-    const r = await fetch("https://gps-server-f9b6.onrender.com/devices");
-    const data = await r.json();
-    data.forEach(update);
-  }catch(e){
-    console.error(e);
-  }
+  const r=await fetch("https://gps-server-f9b6.onrender.com/devices");
+  const data=await r.json();
+  data.forEach(update);
 }
 load();
 
-/* WEBSOCKET */
-const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
+/* WS */
+const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-ws.onmessage = (m)=>{
+ws.onmessage=(m)=>{
   try{
-    const d = JSON.parse(m.data);
+    const d=JSON.parse(m.data);
     if(Array.isArray(d)) d.forEach(update);
     else update(d);
   }catch(e){}
