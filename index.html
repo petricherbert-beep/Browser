@@ -9,14 +9,13 @@
 
 <meta name="theme-color" content="#05070b">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 <style>
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto;
   background:#05070b;
-  height:100vh;
+  color:#c9d1d9;
   overflow:hidden;
 }
 
@@ -27,26 +26,26 @@ body{
   border-radius:22px;
   background:#070a0f;
   border:1px solid rgba(255,255,255,0.08);
-  box-shadow:0 0 0 1px rgba(0,0,0,0.6),
-             0 20px 60px rgba(0,0,0,0.8);
-  overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,0.8);
   z-index:1;
+  pointer-events:none;
 }
 
-/* MAP */
+/* MAP FIX (WICHTIG) */
 #map{
-  height:100%;
-  width:100%;
+  position:absolute;
+  inset:12px;
+  border-radius:22px;
   z-index:0;
 }
 
 /* PANEL */
 #panel{
   position:absolute;
-  top:16px;
-  left:16px;
+  top:20px;
+  left:20px;
   width:390px;
-  max-height:92%;
+  max-height:90vh;
   overflow:auto;
 
   background:rgba(10,15,25,0.55);
@@ -59,6 +58,21 @@ body{
   z-index:9999;
 
   box-shadow:0 20px 60px rgba(0,0,0,0.6);
+  color:#c9d1d9;
+}
+
+/* TEXT */
+.device{
+  margin-top:10px;
+  padding:12px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(0,255,200,0.08);
+  border-radius:14px;
+  color:#c9d1d9;
+}
+
+.device b{
+  color:#e6edf3;
 }
 
 /* BUTTONS */
@@ -71,7 +85,7 @@ button{
   border:1px solid rgba(0,255,200,0.15);
 
   background:rgba(10,20,30,0.6);
-  color:#d7fff7;
+  color:#c9d1d9;
 
   cursor:pointer;
   transition:0.2s;
@@ -83,7 +97,7 @@ button:hover{
   box-shadow:0 0 12px rgba(0,255,200,0.25);
 }
 
-/* FOLLOW BLUE */
+/* FOLLOW */
 .follow{
   border-color:rgba(0,140,255,0.4);
 }
@@ -91,19 +105,9 @@ button:hover{
   box-shadow:0 0 14px rgba(0,140,255,0.4);
 }
 
-/* ALARM RED */
+/* ALARM */
 .alarm.active{
   box-shadow:0 0 14px rgba(255,60,60,0.4);
-}
-
-/* DEVICE */
-.device{
-  margin-top:10px;
-  padding:12px;
-
-  background:rgba(255,255,255,0.03);
-  border:1px solid rgba(0,255,200,0.08);
-  border-radius:14px;
 }
 
 /* CHIPS */
@@ -114,6 +118,7 @@ button:hover{
   font-size:11px;
   margin-left:6px;
   border:1px solid rgba(255,255,255,0.1);
+  color:#c9d1d9;
 }
 
 .online{color:#00ff7b;border-color:#00ff7b55;}
@@ -127,18 +132,18 @@ button:hover{
 
 <div class="app-frame"></div>
 
-<div id="panel">
-  <b>🚗 GPS Neon Control Center</b><br>
+<div id="map"></div>
 
-  <button onclick="toggleNav()">Nav</button>
+<div id="panel">
+  <b>🚗 GPS Control Center</b><br>
+
   <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+  <button onclick="toggleNav()">Nav</button>
 
   <hr>
 
   <div id="list"></div>
 </div>
-
-<div id="map"></div>
 
 <script>
 
@@ -147,7 +152,6 @@ const devices={};
 const markers={};
 const tracks={};
 const lastPos={};
-const heading={};
 
 let followId=null;
 let navMode=false;
@@ -166,7 +170,7 @@ function color(name){
 }
 
 function accuracyColor(a){
-  if(a==null) return "#fff";
+  if(a==null) return "#c9d1d9";
   if(a<=5) return "#00ff99";
   if(a<=20) return "#ffd60a";
   return "#ff3b3b";
@@ -186,8 +190,6 @@ function update(d){
   const lat=+d.lat, lon=+d.lon;
   if(!lat||!lon) return;
 
-  const prev=lastPos[id];
-  lastPos[id]={lat,lon};
   devices[id]=d;
 
   if(!markers[id]){
@@ -195,11 +197,10 @@ function update(d){
     tracks[id]=L.polyline([],{
       color:color(d.name),
       weight:3
-    });
+    }).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-
   tracks[id].addLatLng([lat,lon]);
 
   if(followId===id){
@@ -219,15 +220,24 @@ function icon(name){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="display:flex;justify-content:center;align-items:center;">
-        <div style="font-size:24px;color:${col};text-shadow:0 0 10px ${col}">▲</div>
-        <div style="position:absolute;font-size:10px;color:white">${letter}</div>
+      <div style="display:flex;align-items:center;justify-content:center;">
+        <div style="
+          font-size:24px;
+          color:${col};
+          text-shadow:0 0 10px ${col};
+        ">▲</div>
+
+        <div style="
+          position:absolute;
+          font-size:10px;
+          color:white;
+        ">${letter}</div>
       </div>
     `
   });
 }
 
-/* UI */
+/* RENDER */
 function render(){
   const el=document.getElementById("list");
   el.innerHTML="";
@@ -270,9 +280,6 @@ function render(){
           ${followId===id?"Unfollow":"Follow"}
         </button>
 
-        <button onclick="toggleTrack('${id}')">Track</button>
-        <button onclick="clearTrack('${id}')">Clear</button>
-
         <button class="alarm ${d.alarmActive?'active':''}"
           onclick="toggleAlarm('${id}')">
           ${d.alarmActive?"Alarm AUS":"Alarm EIN"}
@@ -280,6 +287,8 @@ function render(){
 
         <button onclick="watch('${id}')">Watch</button>
         <button onclick="unwatch('${id}')">Unwatch</button>
+
+        <button onclick="clearTrack('${id}')">Clear</button>
 
       </div>
     `;
@@ -293,16 +302,6 @@ function toggleFollow(id){
 
 function toggleNav(){
   navMode=!navMode;
-}
-
-function toggleTrack(id){
-  if(tracks[id]){
-    map.addLayer(tracks[id]);
-  }
-}
-
-function clearTrack(id){
-  if(tracks[id]) tracks[id].setLatLngs([]);
 }
 
 function toggleAlarm(id){
@@ -322,7 +321,10 @@ function unwatch(id){
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/unwatch`,{method:"POST"});
 }
 
-/* FULLSCREEN */
+function clearTrack(id){
+  if(tracks[id]) tracks[id].setLatLngs([]);
+}
+
 function toggleFullscreen(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
@@ -341,6 +343,7 @@ load();
 
 /* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
+
 ws.onmessage=(m)=>{
   const d=JSON.parse(m.data);
   if(Array.isArray(d)) d.forEach(update);
