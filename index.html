@@ -18,7 +18,7 @@ body{
   overflow:hidden;
 }
 
-/* PANEL (neon restored) */
+/* PANEL */
 #panel{
   width:390px;
   margin:1.5cm;
@@ -34,7 +34,7 @@ body{
     0 0 60px rgba(0,255,200,0.08);
 }
 
-/* MAP (stronger glow restored) */
+/* MAP */
 #map{
   flex:1;
   margin:1.5cm;
@@ -88,7 +88,7 @@ body{
   opacity:0.9;
 }
 
-/* BUTTONS */
+/* BUTTON */
 button{
   margin:3px;
   padding:6px 10px;
@@ -106,7 +106,7 @@ button:hover{
   border-color:rgba(0,255,200,0.5);
 }
 
-/* 🔥 TOGGLE STATES (FULL NEON RESTORE) */
+/* FULL NEON STATES */
 .active-follow{
   color:#3aa0ff;
   border-color:#3aa0ff;
@@ -137,6 +137,10 @@ button:hover{
 
 <div id="panel">
   <b>🚗 GPS Control Center</b>
+  <br><br>
+
+  <button onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
+
   <hr>
   <div id="list"></div>
 </div>
@@ -235,7 +239,6 @@ function addTrack(id, lat, lon){
 
   const pts=t.getLatLngs();
   pts.push([lat,lon]);
-
   if(pts.length>400) pts.splice(0,pts.length-400);
   t.setLatLngs(pts);
 }
@@ -283,24 +286,20 @@ function follow(id){
   render();
 }
 
-/* TRACK TOGGLE */
+/* TRACK */
 function toggleTrack(id){
   ui[id].track=!ui[id].track;
 
   if(tracks[id]){
-    ui[id].track
-      ? map.addLayer(tracks[id])
-      : map.removeLayer(tracks[id]);
+    ui[id].track ? map.addLayer(tracks[id]) : map.removeLayer(tracks[id]);
   }
 
   render();
 }
 
-/* CLEAR TRACK */
+/* CLEAR */
 function clearTrack(id){
-  if(tracks[id]){
-    tracks[id].setLatLngs([]);
-  }
+  if(tracks[id]) tracks[id].setLatLngs([]);
 }
 
 /* WATCH */
@@ -324,6 +323,22 @@ function alarm(id){
 
   render();
 }
+
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
+}
+
+/* ESC SUPPORT */
+document.addEventListener("keydown",(e)=>{
+  if(e.key==="Escape" && document.fullscreenElement){
+    document.exitFullscreen();
+  }
+});
 
 /* RENDER */
 function render(){
@@ -367,7 +382,7 @@ fetch("https://gps-server-f9b6.onrender.com/devices")
 .then(r=>r.json())
 .then(a=>a.forEach(update));
 
-/* WS RECONNECT */
+/* WS */
 let ws;
 function connect(){
   ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
