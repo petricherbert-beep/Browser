@@ -26,8 +26,10 @@ body{
   background:rgba(10,15,25,0.55);
   padding:14px;
   border-radius:18px;
+
   border:1px solid rgba(0,255,200,0.12);
   box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
     0 0 20px rgba(0,255,200,0.15),
     0 0 60px rgba(0,255,200,0.08);
 }
@@ -39,13 +41,20 @@ body{
   border-radius:20px;
   overflow:hidden;
   position:relative;
-  filter:contrast(1) brightness(0.75) saturate(0.95);
+
+  filter: contrast(1) brightness(0.75) saturate(0.95);
+
   box-shadow:
     0 0 15px rgba(0,255,200,0.25),
     0 0 50px rgba(0,255,200,0.35),
-    0 0 100px rgba(0,255,200,0.25);
+    0 0 100px rgba(0,255,200,0.25),
+    0 0 150px rgba(0,255,200,0.15),
+    inset 0 0 90px rgba(0,0,0,0.35);
+
+  animation: glowPulse 15s ease-in-out infinite;
 }
 
+/* ALARM MODE */
 #map.alarm{
   animation: alarmFlash 0.5s infinite;
   box-shadow:
@@ -71,9 +80,10 @@ body{
 .info{
   font-size:12px;
   line-height:1.4;
+  opacity:0.9;
 }
 
-/* BUTTONS */
+/* BUTTON */
 button{
   margin:3px;
   padding:6px 10px;
@@ -83,13 +93,19 @@ button{
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
+  transition:0.2s;
+}
+
+button:hover{
+  transform:translateY(-1px);
+  border-color:rgba(0,255,200,0.5);
 }
 
 /* GLOW STATES */
-.active-follow{color:#3aa0ff; box-shadow:0 0 10px #3aa0ff;}
-.active-track{color:#00ffb3; box-shadow:0 0 10px #00ffb3;}
-.active-watch{color:#ffd84d; box-shadow:0 0 10px #ffd84d;}
-.active-alarm{color:#ff4d4d; box-shadow:0 0 10px #ff4d4d;}
+.active-follow{color:#3aa0ff;border-color:#3aa0ff;box-shadow:0 0 10px #3aa0ff;}
+.active-track{color:#00ffb3;border-color:#00ffb3;box-shadow:0 0 10px #00ffb3;}
+.active-watch{color:#ffd84d;border-color:#ffd84d;box-shadow:0 0 10px #ffd84d;}
+.active-alarm{color:#ff4d4d;border-color:#ff4d4d;box-shadow:0 0 10px #ff4d4d;}
 </style>
 </head>
 
@@ -97,6 +113,8 @@ button{
 
 <div id="panel">
   <b>🚗 GPS Control Center</b><br><br>
+  <button onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
+  <hr>
   <div id="list"></div>
 </div>
 
@@ -105,21 +123,27 @@ button{
 <script>
 
 /* STATE */
-const devices={};
-const ui={};
-const markers={};
-const tracks={};
-const anim={};
-const crashState={};
-const replayState={};
+const devices = {};
+const ui = {};
+const markers = {};
+const tracks = {};
+const anim = {};
 
-let followId=null;
+let followId = null;
 
 /* MAP */
-const map=L.map("map").setView([47.09,15.42],13);
+const map = L.map("map").setView([47.09,15.42],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
-/* BEARING */
+/* COLOR */
+function color(n){
+  n=(n||"").toLowerCase();
+  if(n.includes("oliver")) return "#3aa0ff";
+  if(n.includes("nicole")) return "#ff4d4d";
+  return "#00ffb3";
+}
+
+/* BEARING (FIX) */
 function bearing(a,b,c,d){
   const toRad=x=>x*Math.PI/180;
   const toDeg=x=>x*180/Math.PI;
@@ -131,8 +155,9 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON */
-function icon(name,color,rot=0){
+/* ICON (ROTATION FIX + BLACK BORDER + LETTER) */
+function icon(name,rot=0){
+  const c=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
 
   return L.divIcon({
@@ -141,9 +166,10 @@ function icon(name,color,rot=0){
     iconAnchor:[20,20],
     html:`
       <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
+
         <div style="
           font-size:26px;
-          color:${color};
+          color:${c};
           -webkit-text-stroke:1px #000;
           transform:rotate(${rot}deg);
         ">▲</div>
@@ -151,101 +177,81 @@ function icon(name,color,rot=0){
         <div style="
           position:absolute;
           font-size:11px;
-          font-weight:800;
+          font-weight:700;
           color:#fff;
           text-shadow:0 0 6px #000;
           transform:translateY(6px);
         ">${letter}</div>
+
       </div>
     `
   });
 }
 
-/* TRACK */
-function addTrack(id,lat,lon){
-  if(!tracks[id]) tracks[id]={points:[],layers:[],locked:false};
-  const t=tracks[id];
-  if(t.locked) return;
+/* TRACK (LIMIT 30 + COLOR FIX) */
+function addTrack(id, lat, lon){
+  const t = tracks[id] || (tracks[id]={pts:[]});
 
-  const c =
-    devices[id].name?.toLowerCase().includes("oliver") ? "#3aa0ff" :
-    devices[id].name?.toLowerCase().includes("nicole") ? "#ff4d4d" :
-    "#00ffb3";
+  const c=color(devices[id].name);
 
-  t.points.push({lat,lon});
+  t.pts.push([lat,lon]);
 
-  const op=Math.max(0.15,t.points.length/30);
+  if(t.pts.length>30){
+    t.pts.shift();
+  }
 
-  const dot=L.circleMarker([lat,lon],{
-    radius:3,
+  if(t.poly) map.removeLayer(t.poly);
+
+  t.poly = L.polyline(t.pts,{
     color:c,
-    fillOpacity:op
+    weight:3,
+    opacity:0.25,
+    dashArray:"6,10"
   }).addTo(map);
 
-  t.layers.push(dot);
-
-  const prev=t.points.at(-2);
-  if(prev){
-    const line=L.polyline([[prev.lat,prev.lon],[lat,lon]],{
-      color:c,
-      weight:3,
-      opacity:op,
-      dashArray:"6,10"
-    }).addTo(map);
-
-    t.layers.push(line);
-  }
-
-  if(t.points.length>30){
-    t.points.shift();
-    map.removeLayer(t.layers.shift());
-    map.removeLayer(t.layers.shift());
-  }
+  // DOT
+  L.circleMarker([lat,lon],{
+    radius:3,
+    color:c,
+    fillOpacity:0.4
+  }).addTo(map);
 }
 
 /* UPDATE */
 function update(d){
   const id=d.deviceId;
   const lat=+d.lat, lon=+d.lon;
-  if(isNaN(lat)||isNaN(lon)) return;
+  if(!lat||!lon) return;
 
   const prev=devices[id];
-  devices[id]={...devices[id],...d,lastUpdate:Date.now()};
+  devices[id]={...devices[id],...d};
 
-  if(!ui[id]) ui[id]={follow:false,track:false,watch:false,alarm:false};
+  ui[id]=ui[id]||{follow:false,track:false,watch:false};
 
-  const c =
-    d.name?.toLowerCase().includes("oliver") ? "#3aa0ff" :
-    d.name?.toLowerCase().includes("nicole") ? "#ff4d4d" :
-    "#00ffb3";
+  const c=color(d.name);
 
   let rot=0;
   if(prev) rot=bearing(prev.lat,prev.lon,lat,lon);
 
   if(!markers[id]){
-    markers[id]=L.marker([lat,lon],{icon:icon(d.name,c,rot)}).addTo(map);
+    markers[id]=L.marker([lat,lon],{icon:icon(d.name,rot)}).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name,c,rot));
+  markers[id].setIcon(icon(d.name,rot));
 
   /* ACCIDENT */
   if(d.lastEvent==="Accident"){
-    if(!crashState[id]){
-      crashState[id]={};
-      if(tracks[id]) tracks[id].locked=true;
+    map.flyTo([lat,lon],17);
 
-      L.circleMarker([lat,lon],{
-        radius:7,
-        color:"#ff0000",
-        fillColor:"#ff0000",
-        fillOpacity:1
-      }).addTo(map);
+    L.circleMarker([lat,lon],{
+      radius:8,
+      color:"#ff0000",
+      fillColor:"#ff0000",
+      fillOpacity:1
+    }).addTo(map);
 
-      ui[id].alarm=true;
-      map.flyTo([lat,lon],17);
-      document.getElementById("map").classList.add("alarm");
-    }
+    document.getElementById("map").classList.add("alarm");
   }
 
   if(ui[id].track) addTrack(id,lat,lon);
@@ -255,7 +261,56 @@ function update(d){
   render();
 }
 
-/* UI */
+/* FOLLOW */
+function follow(id){
+  ui[id].follow=!ui[id].follow;
+  followId=ui[id].follow?id:null;
+
+  if(followId){
+    map.flyTo([devices[id].lat,devices[id].lon],16);
+  }
+
+  render();
+}
+
+/* TRACK */
+function toggleTrack(id){
+  ui[id].track=!ui[id].track;
+  render();
+}
+
+/* WATCH */
+function watch(id){
+  ui[id].watch=!ui[id].watch;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${ui[id].watch?"watch":"unwatch"}`,{
+    method:"POST"
+  });
+
+  render();
+}
+
+/* ALARM */
+function alarm(id){
+  devices[id].alarmActive=!devices[id].alarmActive;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${devices[id].alarmActive}`,{
+    method:"POST"
+  });
+
+  render();
+}
+
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
+}
+
+/* RENDER */
 function render(){
   const el=document.getElementById("list");
   el.innerHTML="";
@@ -265,42 +320,35 @@ function render(){
 
     el.innerHTML+=`
       <div class="device">
-        <b>${d.name}</b>
+        <b>${d.name}</b><br><br>
+
+        📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
 
         <div class="info">
-          📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
           🔋 ${d.battery??"-"}%<br>
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
           📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
           🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
-          👀 ${d.isWatched?"WATCHED":"NOT"}<br>
+          👀 ${d.isWatched?"WATCHED":"NO"}<br>
           📡 ${d.status??""}<br>
           🚨 ${d.lastEvent??""}
         </div>
 
         <hr>
 
-        <button class="${u.follow?'active-follow':''}" onclick="toggle('${id}','follow')">FOLLOW</button>
-        <button class="${u.track?'active-track':''}" onclick="toggle('${id}','track')">TRACK</button>
-        <button class="${u.watch?'active-watch':''}" onclick="toggleWatch('${id}')">WATCH</button>
+        <button class="${u?.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
+        <button class="${u?.track?'active-track':''}" onclick="toggleTrack('${id}')">TRACK</button>
+        <button class="${u?.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
+        <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
       </div>
     `;
   });
 }
 
-/* TOGGLE */
-function toggle(id,k){
-  ui[id][k]=!ui[id][k];
-  if(k==="follow") followId=ui[id].follow?id:null;
-  render();
-}
-
-function toggleWatch(id){
-  const s=!ui[id].watch;
-  ui[id].watch=s;
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${s?"watch":"unwatch"}`,{method:"POST"});
-  render();
-}
+/* LOAD */
+fetch("https://gps-server-f9b6.onrender.com/devices")
+.then(r=>r.json())
+.then(a=>a.forEach(update));
 
 /* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
@@ -308,10 +356,6 @@ ws.onmessage=e=>{
   const d=JSON.parse(e.data);
   Array.isArray(d)?d.forEach(update):update(d);
 };
-
-fetch("https://gps-server-f9b6.onrender.com/devices")
-.then(r=>r.json())
-.then(a=>a.forEach(update));
 
 </script>
 
