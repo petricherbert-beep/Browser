@@ -211,7 +211,10 @@ function addTrack(id, lat, lon){
   t.segments.push(point);
 
   if(last){
-    const line = L.polyline([ [last.lat,last.lon], [lat,lon] ], {
+    const line = L.polyline([
+      [last.lat,last.lon],
+      [lat,lon]
+    ],{
       color: color(devices[id].name),
       weight: 3,
       dashArray: "6,10",
@@ -246,26 +249,35 @@ function updateTrackOpacity(id){
   });
 }
 
-/* CRASH FREEZE */
+/* CRASH TRAIL */
 function freezeCrashTrail(id){
   const t = tracks[id];
   if(!t || !t.crashBuffer) return;
 
-  t.crashBuffer.forEach((p,i)=>{
-    if(i===0) return;
+  const pts = t.crashBuffer;
 
+  for(let i=1;i<pts.length;i++){
     const line = L.polyline([
-      [t.crashBuffer[i-1].lat, t.crashBuffer[i-1].lon],
-      [p.lat,p.lon]
+      [pts[i-1].lat,pts[i-1].lon],
+      [pts[i].lat,pts[i].lon]
     ],{
       color:"#ff0000",
       weight:5,
-      opacity:0.8
+      opacity:0.85
     }).addTo(map);
-  });
+  }
+
+  const last = pts[pts.length - 1];
+
+  L.circleMarker([last.lat,last.lon],{
+    radius:7,
+    color:"#ff0000",
+    fillColor:"#ff0000",
+    fillOpacity:1
+  }).addTo(map);
 }
 
-/* REPLAY */
+/* REPLAY (time-based) */
 function startReplay(id){
   const t = tracks[id];
   if(!t || !t.crashBuffer.length) return;
@@ -284,15 +296,20 @@ function startReplay(id){
   }).addTo(map);
 
   function step(){
-    if(i>=t.crashBuffer.length) return;
+    if(i >= t.crashBuffer.length) return;
 
     const p = t.crashBuffer[i];
 
     t.replayMarker.setLatLng([p.lat,p.lon]);
     map.panTo([p.lat,p.lon],{animate:false});
 
+    const next = t.crashBuffer[i+1];
     i++;
-    setTimeout(step,250);
+
+    if(next){
+      const delay = next.time - p.time;
+      setTimeout(step, Math.max(delay,80));
+    }
   }
 
   step();
@@ -318,7 +335,11 @@ function handleAccidentLogic(id,d){
   } else {
     a.time=null;
     a.alert=false;
-    if(markers[id]) markers[id].setIcon(icon(d.name));
+
+    if(markers[id]){
+      markers[id].setIcon(icon(d.name));
+    }
+
     return;
   }
 
