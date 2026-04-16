@@ -50,13 +50,6 @@ body{
     inset 0 0 90px rgba(0,0,0,0.35);
 }
 
-@keyframes blink{
-  0%{opacity:1;}
-  50%{opacity:0.2;}
-  100%{opacity:1;}
-}
-
-/* DEVICE */
 .device{
   padding:10px;
   margin-bottom:10px;
@@ -82,11 +75,21 @@ button{
   cursor:pointer;
 }
 
+button:hover{
+  transform:translateY(-1px);
+  border-color:rgba(0,255,200,0.5);
+}
+
 .active-follow{ color:#3aa0ff; border-color:#3aa0ff; }
 .active-track{ color:#00ffb3; border-color:#00ffb3; }
 .active-watch{ color:#ffd84d; border-color:#ffd84d; }
 .active-alarm{ color:#ff4d4d; border-color:#ff4d4d; }
 
+@keyframes blink{
+  0%{opacity:1;}
+  50%{opacity:0.2;}
+  100%{opacity:1;}
+}
 </style>
 
 </head>
@@ -141,8 +144,28 @@ function icon(name){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="font-size:26px;color:${c};">▲</div>
-      <div style="font-size:11px;color:#fff">${letter}</div>
+      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
+        
+        <div style="
+          font-size:26px;
+          color:${c};
+          text-shadow:
+            -1px -1px 0 #000,
+             1px -1px 0 #000,
+            -1px  1px 0 #000,
+             1px  1px 0 #000;
+        ">▲</div>
+
+        <div style="
+          position:absolute;
+          font-size:11px;
+          font-weight:700;
+          color:#fff;
+          text-shadow:0 0 6px rgba(0,0,0,0.9);
+          transform:translateY(6px);
+        ">${letter}</div>
+
+      </div>
     `
   });
 }
@@ -248,6 +271,12 @@ function handleAccidentLogic(id, d){
   } else {
     a.time = null;
     a.alert = false;
+
+    // Marker zurücksetzen
+    if(markers[id]){
+      markers[id].setIcon(icon(d.name));
+    }
+
     return;
   }
 
@@ -303,10 +332,20 @@ function update(d){
 
 /* CONTROLS */
 function follow(id){
-  Object.keys(ui).forEach(k => ui[k].follow=false);
-  ui[id].follow=true;
-  followId=id;
+  if(followId === id){
+    ui[id].follow = false;
+    followId = null;
+    render();
+    return;
+  }
+
+  Object.keys(ui).forEach(k => ui[k].follow = false);
+
+  ui[id].follow = true;
+  followId = id;
+
   map.flyTo([devices[id].lat,devices[id].lon],16);
+
   render();
 }
 
