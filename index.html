@@ -63,7 +63,6 @@ body{
   line-height:1.4;
 }
 
-/* BUTTON */
 button{
   margin:3px;
   padding:6px 10px;
@@ -170,7 +169,7 @@ function icon(name){
   });
 }
 
-/* SMOOTH */
+/* SMOOTH MOVE */
 function smoothMove(id, lat, lon){
   const m=markers[id];
   if(!m) return;
@@ -195,13 +194,13 @@ function smoothMove(id, lat, lon){
 /* TRACK */
 function addTrack(id, lat, lon){
   if(!tracks[id]){
-    tracks[id] = { segments: [], points: [] };
+    tracks[id] = { segments: [], points: [], crashBuffer: [], replayMarker:null };
   }
 
   const t = tracks[id];
   const last = t.points[t.points.length - 1];
 
-  t.points.push([lat, lon]);
+  t.points.push({lat,lon,time:Date.now()});
 
   const point = L.circleMarker([lat, lon], {
     radius: 3,
@@ -212,7 +211,7 @@ function addTrack(id, lat, lon){
   t.segments.push(point);
 
   if(last){
-    const line = L.polyline([last, [lat, lon]], {
+    const line = L.polyline([ [last.lat,last.lon], [lat,lon] ], {
       color: color(devices[id].name),
       weight: 3,
       dashArray: "6,10",
@@ -221,6 +220,8 @@ function addTrack(id, lat, lon){
 
     t.segments.push(line);
   }
+
+  t.crashBuffer = t.points.filter(p => Date.now() - p.time < 30000);
 
   while(t.points.length > 30){
     t.points.shift();
@@ -239,52 +240,93 @@ function updateTrackOpacity(id){
 
   const total = t.segments.length;
 
-  t.segments.forEach((seg, i) => {
+  t.segments.forEach((seg,i)=>{
     const op = 0.1 + (i/total)*0.9;
-    if(seg.setStyle) seg.setStyle({ opacity: op, fillOpacity: op });
+    if(seg.setStyle) seg.setStyle({opacity:op,fillOpacity:op});
   });
 }
 
-/* CLEAR */
-function clearTrack(id){
-  if(tracks[id]){
-    tracks[id].segments.forEach(s => map.removeLayer(s));
-    tracks[id] = { segments: [], points: [] };
-  }
+/* CRASH FREEZE */
+function freezeCrashTrail(id){
+  const t = tracks[id];
+  if(!t || !t.crashBuffer) return;
+
+  t.crashBuffer.forEach((p,i)=>{
+    if(i===0) return;
+
+    const line = L.polyline([
+      [t.crashBuffer[i-1].lat, t.crashBuffer[i-1].lon],
+      [p.lat,p.lon]
+    ],{
+      color:"#ff0000",
+      weight:5,
+      opacity:0.8
+    }).addTo(map);
+  });
 }
 
-/* ACCIDENT */
-function handleAccidentLogic(id, d){
-  const now = Date.now();
+/* REPLAY */
+function startReplay(id){
+  const t = tracks[id];
+  if(!t || !t.crashBuffer.length) return;
 
-  if(!accidentWatch[id]){
-    accidentWatch[id] = { time:null, alert:false };
+  let i=0;
+
+  if(t.replayMarker){
+    map.removeLayer(t.replayMarker);
   }
 
-  const a = accidentWatch[id];
+  t.replayMarker = L.circleMarker([0,0],{
+    radius:6,
+    color:"#fff",
+    fillColor:"#ff0000",
+    fillOpacity:1
+  }).addTo(map);
 
-  if(d.lastEvent === "Accident"){
+  function step(){
+    if(i>=t.crashBuffer.length) return;
+
+    const p = t.crashBuffer[i];
+
+    t.replayMarker.setLatLng([p.lat,p.lon]);
+    map.panTo([p.lat,p.lon],{animate:false});
+
+    i++;
+    setTimeout(step,250);
+  }
+
+  step();
+}
+
+/* ACCIDENT LOGIC */
+function handleAccidentLogic(id,d){
+  const now=Date.now();
+
+  if(!accidentWatch[id]){
+    accidentWatch[id]={time:null,alert:false};
+  }
+
+  const a=accidentWatch[id];
+
+  if(d.lastEvent==="Accident"){
     if(!a.time){
-      a.time = now;
-      a.alert = false;
+      a.time=now;
+      a.alert=false;
+
+      freezeCrashTrail(id);
     }
   } else {
-    a.time = null;
-    a.alert = false;
-
-    // Marker zurücksetzen
-    if(markers[id]){
-      markers[id].setIcon(icon(d.name));
-    }
-
+    a.time=null;
+    a.alert=false;
+    if(markers[id]) markers[id].setIcon(icon(d.name));
     return;
   }
 
-  const noMove = !d.isMotion && (d.speed ?? 0) < 1;
+  const noMove=!d.isMotion && (d.speed??0)<1;
 
   if(a.time && noMove && !a.alert){
-    if(now - a.time > 15000){
-      map.flyTo([d.lat, d.lon], 18);
+    if(now-a.time>15000){
+      map.flyTo([d.lat,d.lon],18);
 
       markers[id].setIcon(L.divIcon({
         html:`<div style="font-size:30px;color:red;animation:blink 1s infinite;">🚨</div>`
@@ -292,9 +334,7 @@ function handleAccidentLogic(id, d){
 
       markers[id].bindPopup("🚨 NO MOVEMENT AFTER ACCIDENT").openPopup();
 
-      alert(`🚨 ${d.name} – keine Bewegung nach Unfall!`);
-
-      a.alert = true;
+      a.alert=true;
     }
   }
 }
@@ -308,7 +348,7 @@ function update(d){
   devices[id]={...devices[id],...d};
 
   if(!ui[id]){
-    ui[id]={ follow:false, track:false, watch:d.isWatched||false };
+    ui[id]={follow:false,track:false,watch:d.isWatched||false};
   }
 
   if(!markers[id]){
@@ -322,27 +362,27 @@ function update(d){
   }
 
   if(followId===id){
-    map.panTo([lat,lon], {animate:false});
+    map.panTo([lat,lon],{animate:false});
   }
 
-  handleAccidentLogic(id, d);
+  handleAccidentLogic(id,d);
 
   render();
 }
 
 /* CONTROLS */
 function follow(id){
-  if(followId === id){
-    ui[id].follow = false;
-    followId = null;
+  if(followId===id){
+    ui[id].follow=false;
+    followId=null;
     render();
     return;
   }
 
-  Object.keys(ui).forEach(k => ui[k].follow = false);
+  Object.keys(ui).forEach(k=>ui[k].follow=false);
 
-  ui[id].follow = true;
-  followId = id;
+  ui[id].follow=true;
+  followId=id;
 
   map.flyTo([devices[id].lat,devices[id].lon],16);
 
@@ -379,7 +419,7 @@ function alarm(id){
 function toggleFullscreen(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
-  }else{
+  } else {
     document.exitFullscreen();
   }
 }
@@ -422,7 +462,7 @@ function render(){
         <button class="${u.track?'active-track':''}" onclick="toggleTrack('${id}')">TRACK</button>
         <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
         <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
-        <button onclick="clearTrack('${id}')">CLEAR</button>
+        <button onclick="startReplay('${id}')">REPLAY</button>
       </div>
     `;
   });
