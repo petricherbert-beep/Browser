@@ -26,7 +26,6 @@ body{
   background:rgba(10,15,25,0.55);
   padding:14px;
   border-radius:18px;
-
   border:1px solid rgba(0,255,200,0.12);
   box-shadow:
     0 0 0 1px rgba(0,0,0,0.6),
@@ -41,26 +40,19 @@ body{
   border-radius:20px;
   overflow:hidden;
   position:relative;
-
-  filter: contrast(1) brightness(0.75) saturate(0.95);
-
+  filter:contrast(1) brightness(0.75) saturate(0.95);
   box-shadow:
     0 0 15px rgba(0,255,200,0.25),
     0 0 50px rgba(0,255,200,0.35),
-    0 0 100px rgba(0,255,200,0.25),
-    0 0 150px rgba(0,255,200,0.15),
-    inset 0 0 90px rgba(0,0,0,0.35);
-
-  animation: glowPulse 15s ease-in-out infinite;
+    0 0 100px rgba(0,255,200,0.25);
 }
 
-/* ALARM MODE */
+/* ALARM */
 #map.alarm{
   animation: alarmFlash 0.5s infinite;
   box-shadow:
     0 0 10px rgba(255,0,0,0.5),
-    0 0 60px rgba(255,0,0,0.4),
-    inset 0 0 120px rgba(255,0,0,0.2);
+    0 0 60px rgba(255,0,0,0.4);
 }
 
 @keyframes alarmFlash{
@@ -77,13 +69,8 @@ body{
   background:rgba(255,255,255,0.03);
 }
 
-.info{
-  font-size:12px;
-  line-height:1.4;
-  opacity:0.9;
-}
+.info{font-size:12px; line-height:1.4;}
 
-/* BUTTON */
 button{
   margin:3px;
   padding:6px 10px;
@@ -93,19 +80,12 @@ button{
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
-  transition:0.2s;
 }
 
-button:hover{
-  transform:translateY(-1px);
-  border-color:rgba(0,255,200,0.5);
-}
-
-/* GLOW STATES */
-.active-follow{color:#3aa0ff;border-color:#3aa0ff;box-shadow:0 0 10px #3aa0ff;}
-.active-track{color:#00ffb3;border-color:#00ffb3;box-shadow:0 0 10px #00ffb3;}
-.active-watch{color:#ffd84d;border-color:#ffd84d;box-shadow:0 0 10px #ffd84d;}
-.active-alarm{color:#ff4d4d;border-color:#ff4d4d;box-shadow:0 0 10px #ff4d4d;}
+.active-follow{color:#3aa0ff;box-shadow:0 0 10px #3aa0ff;}
+.active-track{color:#00ffb3;box-shadow:0 0 10px #00ffb3;}
+.active-watch{color:#ffd84d;box-shadow:0 0 10px #ffd84d;}
+.active-alarm{color:#ff4d4d;box-shadow:0 0 10px #ff4d4d;}
 </style>
 </head>
 
@@ -122,20 +102,21 @@ button:hover{
 
 <script>
 
-/* STATE */
+/* ================= STATE ================= */
 const devices = {};
 const ui = {};
 const markers = {};
 const tracks = {};
 const anim = {};
+const replayState = {};
 
 let followId = null;
 
-/* MAP */
+/* ================= MAP ================= */
 const map = L.map("map").setView([47.09,15.42],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
-/* COLOR */
+/* ================= COLOR ================= */
 function color(n){
   n=(n||"").toLowerCase();
   if(n.includes("oliver")) return "#3aa0ff";
@@ -143,7 +124,7 @@ function color(n){
   return "#00ffb3";
 }
 
-/* BEARING (FIX) */
+/* ================= BEARING ================= */
 function bearing(a,b,c,d){
   const toRad=x=>x*Math.PI/180;
   const toDeg=x=>x*180/Math.PI;
@@ -155,7 +136,7 @@ function bearing(a,b,c,d){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON (ROTATION FIX + BLACK BORDER + LETTER) */
+/* ================= ICON ================= */
 function icon(name,rot=0){
   const c=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
@@ -166,14 +147,12 @@ function icon(name,rot=0){
     iconAnchor:[20,20],
     html:`
       <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
-
         <div style="
           font-size:26px;
           color:${c};
           -webkit-text-stroke:1px #000;
           transform:rotate(${rot}deg);
         ">▲</div>
-
         <div style="
           position:absolute;
           font-size:11px;
@@ -182,25 +161,21 @@ function icon(name,rot=0){
           text-shadow:0 0 6px #000;
           transform:translateY(6px);
         ">${letter}</div>
-
       </div>
     `
   });
 }
 
-/* TRACK (LIMIT 30 + COLOR FIX) */
-function addTrack(id, lat, lon){
+/* ================= TRACK ================= */
+function addTrack(id,lat,lon){
   const t = tracks[id] || (tracks[id]={pts:[]});
 
-  const c=color(devices[id].name);
-
   t.pts.push([lat,lon]);
-
-  if(t.pts.length>30){
-    t.pts.shift();
-  }
+  if(t.pts.length>30) t.pts.shift();
 
   if(t.poly) map.removeLayer(t.poly);
+
+  const c=color(devices[id].name);
 
   t.poly = L.polyline(t.pts,{
     color:c,
@@ -209,7 +184,6 @@ function addTrack(id, lat, lon){
     dashArray:"6,10"
   }).addTo(map);
 
-  // DOT
   L.circleMarker([lat,lon],{
     radius:3,
     color:c,
@@ -217,7 +191,44 @@ function addTrack(id, lat, lon){
   }).addTo(map);
 }
 
-/* UPDATE */
+/* ================= REPLAY ================= */
+function startReplay(id,speed=700){
+  const t = tracks[id];
+  if(!t || !t.pts.length) return;
+  if(replayState[id]) return;
+
+  let i=0;
+
+  const m=L.circleMarker(t.pts[0],{
+    radius:6,
+    color:"#fff",
+    fillColor:"#fff",
+    fillOpacity:1
+  }).addTo(map);
+
+  replayState[id]=m;
+
+  function step(){
+    if(i>=t.pts.length){
+      map.removeLayer(m);
+      delete replayState[id];
+      return;
+    }
+    m.setLatLng(t.pts[i++]);
+    setTimeout(step,speed);
+  }
+
+  step();
+}
+
+function stopReplay(id){
+  if(replayState[id]){
+    map.removeLayer(replayState[id]);
+    delete replayState[id];
+  }
+}
+
+/* ================= UPDATE ================= */
 function update(d){
   const id=d.deviceId;
   const lat=+d.lat, lon=+d.lon;
@@ -240,7 +251,6 @@ function update(d){
   markers[id].setLatLng([lat,lon]);
   markers[id].setIcon(icon(d.name,rot));
 
-  /* ACCIDENT */
   if(d.lastEvent==="Accident"){
     map.flyTo([lat,lon],17);
 
@@ -261,56 +271,7 @@ function update(d){
   render();
 }
 
-/* FOLLOW */
-function follow(id){
-  ui[id].follow=!ui[id].follow;
-  followId=ui[id].follow?id:null;
-
-  if(followId){
-    map.flyTo([devices[id].lat,devices[id].lon],16);
-  }
-
-  render();
-}
-
-/* TRACK */
-function toggleTrack(id){
-  ui[id].track=!ui[id].track;
-  render();
-}
-
-/* WATCH */
-function watch(id){
-  ui[id].watch=!ui[id].watch;
-
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${ui[id].watch?"watch":"unwatch"}`,{
-    method:"POST"
-  });
-
-  render();
-}
-
-/* ALARM */
-function alarm(id){
-  devices[id].alarmActive=!devices[id].alarmActive;
-
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${devices[id].alarmActive}`,{
-    method:"POST"
-  });
-
-  render();
-}
-
-/* FULLSCREEN */
-function toggleFullscreen(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  }else{
-    document.exitFullscreen();
-  }
-}
-
-/* RENDER */
+/* ================= UI ================= */
 function render(){
   const el=document.getElementById("list");
   el.innerHTML="";
@@ -336,21 +297,47 @@ function render(){
 
         <hr>
 
-        <button class="${u?.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
-        <button class="${u?.track?'active-track':''}" onclick="toggleTrack('${id}')">TRACK</button>
-        <button class="${u?.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
+        <button class="${u.follow?'active-follow':''}" onclick="toggle('${id}','follow')">FOLLOW</button>
+        <button class="${u.track?'active-track':''}" onclick="toggle('${id}','track')">TRACK</button>
+        <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
         <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
+        <button onclick="startReplay('${id}',700)">REPLAY</button>
+        <button onclick="stopReplay('${id}')">STOP</button>
       </div>
     `;
   });
 }
 
-/* LOAD */
+/* ================= TOGGLE ================= */
+function toggle(id,k){
+  ui[id][k]=!ui[id][k];
+  if(k==="follow") followId=ui[id].follow?id:null;
+  render();
+}
+
+function watch(id){
+  ui[id].watch=!ui[id].watch;
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${ui[id].watch?"watch":"unwatch"}`,{method:"POST"});
+  render();
+}
+
+function alarm(id){
+  devices[id].alarmActive=!devices[id].alarmActive;
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${devices[id].alarmActive}`,{method:"POST"});
+  render();
+}
+
+/* ================= FULLSCREEN ================= */
+function toggleFullscreen(){
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+}
+
+/* ================= LOAD + WS ================= */
 fetch("https://gps-server-f9b6.onrender.com/devices")
 .then(r=>r.json())
 .then(a=>a.forEach(update));
 
-/* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 ws.onmessage=e=>{
   const d=JSON.parse(e.data);
