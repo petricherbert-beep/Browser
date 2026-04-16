@@ -45,6 +45,13 @@ body{
   background:rgba(255,255,255,0.03);
 }
 
+.info{
+  font-size:12px;
+  line-height:1.4;
+  opacity:0.9;
+  margin-top:6px;
+}
+
 button{
   margin:3px;
   padding:6px 10px;
@@ -121,7 +128,7 @@ function getBearing(lat1,lon1,lat2,lon2){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON (FIX: Buchstabe wirklich IM Pfeil zentriert) */
+/* ICON */
 function icon(name,rot=0){
   const c=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
@@ -138,8 +145,6 @@ function icon(name,rot=0){
         justify-content:center;
         position:relative;
       ">
-
-        <!-- Pfeil -->
         <div style="
           font-size:26px;
           color:${c};
@@ -151,7 +156,6 @@ function icon(name,rot=0){
              1px  1px 0 #000;
         ">▲</div>
 
-        <!-- Buchstabe exakt zentriert -->
         <div style="
           position:absolute;
           font-size:11px;
@@ -163,20 +167,19 @@ function icon(name,rot=0){
             -1px  1px 0 #000,
              1px  1px 0 #000;
         ">${letter}</div>
-
       </div>
     `
   });
 }
 
-/* TRACK (30 points) */
+/* TRACK */
 function addTrack(id,lat,lon){
   if(!tracks[id]){
     tracks[id]={points:[],segments:[],crashBuffer:[],replayMarker:null};
   }
 
   const t=tracks[id];
-  const last=t.points[t.points.length-1];
+  const last=t.points.at(-1);
 
   t.points.push({lat,lon,time:Date.now()});
 
@@ -239,43 +242,6 @@ function freezeCrashTrail(id){
   }
 }
 
-/* REPLAY */
-function startReplay(id){
-  const t=tracks[id];
-  if(!t||!t.crashBuffer.length)return;
-
-  let i=0;
-
-  if(t.replayMarker){
-    map.removeLayer(t.replayMarker);
-  }
-
-  t.replayMarker=L.circleMarker([0,0],{
-    radius:6,
-    color:"#fff",
-    fillColor:"#ff0000",
-    fillOpacity:1
-  }).addTo(map);
-
-  function step(){
-    if(i>=t.crashBuffer.length)return;
-
-    const p=t.crashBuffer[i];
-
-    t.replayMarker.setLatLng([p.lat,p.lon]);
-    map.panTo([p.lat,p.lon],{animate:false});
-
-    const next=t.crashBuffer[i+1];
-    i++;
-
-    if(next){
-      setTimeout(step,Math.max(next.time-p.time,80));
-    }
-  }
-
-  step();
-}
-
 /* UPDATE */
 function update(d){
   const id=d.deviceId;
@@ -286,7 +252,15 @@ function update(d){
 
   devices[id]={...devices[id],...d};
 
-  if(!ui[id])ui[id]={follow:false,track:false,watch:false};
+  /* UI INIT FIX */
+  if(!ui[id]){
+    ui[id]={
+      follow:false,
+      track:false,
+      watch:!!d.isWatched,
+      alarm:false
+    };
+  }
 
   let rot=0;
   if(prev){
@@ -333,7 +307,7 @@ function smooth(id,lat,lon){
   anim[id]=requestAnimationFrame(step);
 }
 
-/* CRASH LOGIC */
+/* CRASH */
 function handleCrash(id,d){
   const now=Date.now();
 
@@ -373,36 +347,59 @@ function render(){
     el.innerHTML+=`
       <div class="device">
         <b>${d.name}</b><br>
-        📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
-        ⚡ ${d.speed||0} km/h<br>
-        🚶 ${d.isMotion?"MOVE":"STOP"}<br>
-        🚨 ${d.lastEvent==="Accident"?"ACCIDENT":""}
+
+        <div class="info">
+          📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
+          ⚡ Speed: ${d.speed||0} km/h<br>
+          🎯 Accuracy: ${d.accuracy||"-"} m<br>
+          🔋 Battery: ${d.battery||"-"}%<br>
+          🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+          📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
+          🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
+          👀 WATCH: ${u.watch?"YES":"NO"}<br>
+          🚨 ${d.lastEvent==="Accident"?"ACCIDENT":""}
+        </div>
+
         <hr>
-        <button onclick="follow('${id}')">FOLLOW</button>
-        <button onclick="toggleTrack('${id}')">TRACK</button>
-        <button onclick="watch('${id}')">WATCH</button>
-        <button onclick="alarm('${id}')">ALARM</button>
-        <button onclick="startReplay('${id}')">REPLAY</button>
+
+        <button onclick="toggle('follow','${id}')">FOLLOW</button>
+        <button onclick="toggle('track','${id}')">TRACK</button>
+        <button onclick="toggleWatch('${id}')">WATCH</button>
+        <button onclick="toggleAlarm('${id}')">ALARM</button>
       </div>
     `;
   });
 }
 
-/* CONTROLS */
-function follow(id){
-  followId=followId===id?null:id;
+/* TOGGLES */
+function toggle(key,id){
+  ui[id][key]=!ui[id][key];
+  if(key==="follow"){
+    followId=ui[id].follow?id:null;
+  }
+  render();
 }
 
-function toggleTrack(id){
-  ui[id].track=!ui[id].track;
+function toggleWatch(id){
+  const s=!ui[id].watch;
+  ui[id].watch=s;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${s?"watch":"unwatch"}`,{
+    method:"POST"
+  });
+
+  render();
 }
 
-function watch(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{method:"POST"});
-}
+function toggleAlarm(id){
+  const s=!ui[id].alarm;
+  ui[id].alarm=s;
 
-function alarm(id){
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm`,{method:"POST"});
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${s}`,{
+    method:"POST"
+  });
+
+  render();
 }
 
 /* FULLSCREEN */
