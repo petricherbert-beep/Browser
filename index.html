@@ -28,7 +28,6 @@ body{
   border-radius:18px;
   border:1px solid rgba(0,255,200,0.12);
   box-shadow:
-    0 0 0 1px rgba(0,0,0,0.6),
     0 0 20px rgba(0,255,200,0.15),
     0 0 60px rgba(0,255,200,0.08);
 }
@@ -44,26 +43,24 @@ body{
   box-shadow:
     0 0 15px rgba(0,255,200,0.25),
     0 0 50px rgba(0,255,200,0.35),
-    0 0 100px rgba(0,255,200,0.25),
-    0 0 150px rgba(0,255,200,0.15),
-    inset 0 0 90px rgba(0,0,0,0.35);
+    0 0 100px rgba(0,255,200,0.25);
 }
 
-/* ALARM MODE */
+/* ALARM MAP */
 #map.alarm{
-  animation: alarmFlash 0.6s infinite;
+  animation: alarmFlash 0.5s infinite;
   box-shadow:
     0 0 10px rgba(255,0,0,0.5),
-    0 0 40px rgba(255,0,0,0.4),
-    0 0 120px rgba(255,0,0,0.3),
-    inset 0 0 120px rgba(255,0,0,0.25);
+    0 0 60px rgba(255,0,0,0.4),
+    inset 0 0 120px rgba(255,0,0,0.2);
 }
 
 @keyframes alarmFlash{
   0%,100%{filter:brightness(0.8) saturate(1.2);}
-  50%{filter:brightness(1.4) saturate(1.8);}
+  50%{filter:brightness(1.5) saturate(2);}
 }
 
+/* DEVICE */
 .device{
   padding:10px;
   margin-bottom:10px;
@@ -75,9 +72,9 @@ body{
 .info{
   font-size:12px;
   line-height:1.4;
-  opacity:0.9;
 }
 
+/* BUTTONS */
 button{
   margin:3px;
   padding:6px 10px;
@@ -87,12 +84,34 @@ button{
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
+  transition:0.2s;
 }
 
-.active-follow{color:#3aa0ff;}
-.active-track{color:#00ffb3;}
-.active-watch{color:#ffd84d;}
-.active-alarm{color:#ff4d4d;}
+button:hover{
+  transform:translateY(-1px);
+}
+
+/* GLOW STATES */
+.active-follow{
+  color:#3aa0ff;
+  border-color:#3aa0ff;
+  box-shadow:0 0 10px #3aa0ff,0 0 25px rgba(58,160,255,0.3);
+}
+.active-track{
+  color:#00ffb3;
+  border-color:#00ffb3;
+  box-shadow:0 0 10px #00ffb3,0 0 25px rgba(0,255,179,0.3);
+}
+.active-watch{
+  color:#ffd84d;
+  border-color:#ffd84d;
+  box-shadow:0 0 10px #ffd84d,0 0 25px rgba(255,216,77,0.3);
+}
+.active-alarm{
+  color:#ff4d4d;
+  border-color:#ff4d4d;
+  box-shadow:0 0 10px #ff4d4d,0 0 25px rgba(255,77,77,0.3);
+}
 </style>
 </head>
 
@@ -100,8 +119,6 @@ button{
 
 <div id="panel">
   <b>🚗 GPS Control Center</b><br><br>
-  <button onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
-  <hr>
   <div id="list"></div>
 </div>
 
@@ -110,22 +127,22 @@ button{
 <script>
 
 /* STATE */
-const devices = {};
-const ui = {};
-const markers = {};
-const tracks = {};
-const anim = {};
-const crashState = {};
-const replayState = {};
+const devices={};
+const ui={};
+const markers={};
+const tracks={};
+const anim={};
+const crashState={};
+const replayState={};
 
-let followId = null;
+let followId=null;
 
 /* MAP */
-const map = L.map("map").setView([47.09,15.42],13);
+const map=L.map("map").setView([47.09,15.42],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
 /* ICON */
-function icon(name){
+function icon(name,color="#00ffb3"){
   const letter=(name?.[0]||"?").toUpperCase();
 
   return L.divIcon({
@@ -133,9 +150,19 @@ function icon(name){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
-        <div style="font-size:26px;color:#00ffb3;text-shadow:-1px -1px 0 #000,1px -1px 0 #000;">▲</div>
-        <div style="position:absolute;font-size:11px;color:#fff;font-weight:800;text-shadow:0 0 4px #000;">${letter}</div>
+      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
+        <div style="
+          font-size:26px;
+          color:${color};
+          -webkit-text-stroke:1px #000;
+        ">▲</div>
+        <div style="
+          position:absolute;
+          font-size:11px;
+          font-weight:800;
+          color:#fff;
+          text-shadow:0 0 6px #000;
+        ">${letter}</div>
       </div>
     `
   });
@@ -144,11 +171,10 @@ function icon(name){
 /* TRACK */
 function addTrack(id,lat,lon){
   if(!tracks[id]) tracks[id]={points:[],layers:[],locked:false};
-
   const t=tracks[id];
   if(t.locked) return;
 
-  t.points.push({lat,lon,time:Date.now()});
+  t.points.push({lat,lon});
 
   const op=Math.max(0.15,t.points.length/30);
 
@@ -168,24 +194,20 @@ function addTrack(id,lat,lon){
       opacity:op,
       dashArray:"6,10"
     }).addTo(map);
-
     t.layers.push(line);
   }
 
   if(t.points.length>30){
     t.points.shift();
-    const a=t.layers.shift();
-    const b=t.layers.shift();
-    if(a)map.removeLayer(a);
-    if(b)map.removeLayer(b);
+    map.removeLayer(t.layers.shift());
+    map.removeLayer(t.layers.shift());
   }
 }
 
-/* LAST RED */
+/* RED LAST POINT */
 function markLastRed(id){
   const t=tracks[id];
-  if(!t || !t.points.length) return;
-
+  if(!t||!t.points.length) return;
   const p=t.points.at(-1);
 
   L.circleMarker([p.lat,p.lon],{
@@ -196,18 +218,10 @@ function markLastRed(id){
   }).addTo(map);
 }
 
-/* STOP REPLAY */
-function stopReplay(id){
-  if(replayState[id]){
-    map.removeLayer(replayState[id]);
-    delete replayState[id];
-  }
-}
-
 /* REPLAY */
 function startReplay(id,speed=700){
   const t=tracks[id];
-  if(!t || !t.points.length) return;
+  if(!t||!t.points.length) return;
   if(replayState[id]) return;
 
   let i=0;
@@ -227,14 +241,19 @@ function startReplay(id,speed=700){
       delete replayState[id];
       return;
     }
-
-    const p=t.points[i];
-    m.setLatLng([p.lat,p.lon]);
+    m.setLatLng([t.points[i].lat,t.points[i].lon]);
     i++;
     setTimeout(step,speed);
   }
 
   step();
+}
+
+function stopReplay(id){
+  if(replayState[id]){
+    map.removeLayer(replayState[id]);
+    delete replayState[id];
+  }
 }
 
 /* UPDATE */
@@ -243,27 +262,26 @@ function update(d){
   const lat=+d.lat, lon=+d.lon;
   if(isNaN(lat)||isNaN(lon)) return;
 
-  devices[id]={
-    ...devices[id],
-    ...d,
-    lastUpdate:Date.now()
-  };
+  devices[id]={...devices[id],...d,lastUpdate:Date.now()};
 
-  if(!ui[id]){
-    ui[id]={follow:false,track:false,watch:false,alarm:false};
-  }
+  if(!ui[id]) ui[id]={follow:false,track:false,watch:false,alarm:false};
+
+  const color =
+    d.name?.toLowerCase().includes("oliver") ? "#3aa0ff" :
+    d.name?.toLowerCase().includes("nicole") ? "#ff4d4d" :
+    "#00ffb3";
 
   if(!markers[id]){
-    markers[id]=L.marker([lat,lon],{icon:icon(d.name)}).addTo(map);
+    markers[id]=L.marker([lat,lon],{icon:icon(d.name,color)}).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
+  markers[id].setIcon(icon(d.name,color));
 
   /* ACCIDENT */
   if(d.lastEvent==="Accident"){
     if(!crashState[id]){
       crashState[id]={active:true};
-
       if(tracks[id]) tracks[id].locked=true;
 
       markLastRed(id);
@@ -302,17 +320,18 @@ function render(){
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
           📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
           🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
-          👀 WATCH: ${d.isWatched?"YES":"NO"}<br>
-          📡 STATUS: ${d.status??"unknown"}<br>
+          👀 ${d.isWatched?"WATCHED":"NOT"}<br>
+          📡 ${d.status??""}<br>
           ⏱ ${new Date(d.lastUpdate).toLocaleTimeString()}<br>
-          🚨 ${d.lastEvent??"none"}
+          🚨 ${d.lastEvent??""}
         </div>
 
         <hr>
 
-        <button onclick="uiToggle('${id}','follow')">FOLLOW</button>
-        <button onclick="uiToggle('${id}','track')">TRACK</button>
-        <button onclick="toggleWatch('${id}')">WATCH</button>
+        <button class="${u.follow?'active-follow':''}" onclick="toggle('follow','${id}')">FOLLOW</button>
+        <button class="${u.track?'active-track':''}" onclick="toggle('track','${id}')">TRACK</button>
+        <button class="${u.watch?'active-watch':''}" onclick="toggleWatch('${id}')">WATCH</button>
+        <button class="${u.alarm?'active-alarm':''}" onclick="toggleAlarm('${id}')">ALARM</button>
         <button onclick="startReplay('${id}',700)">REPLAY</button>
         <button onclick="stopReplay('${id}')">STOP</button>
       </div>
@@ -320,8 +339,8 @@ function render(){
   });
 }
 
-/* TOGGLES */
-function uiToggle(id,k){
+/* TOGGLE */
+function toggle(k,id){
   ui[id][k]=!ui[id][k];
   if(k==="follow") followId=ui[id].follow?id:null;
   render();
@@ -334,11 +353,11 @@ function toggleWatch(id){
   render();
 }
 
-/* FULLSCREEN */
-function toggleFullscreen(){
-  document.fullscreenElement?
-    document.exitFullscreen():
-    document.documentElement.requestFullscreen();
+function toggleAlarm(id){
+  const s=!ui[id].alarm;
+  ui[id].alarm=s;
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${s}`,{method:"POST"});
+  render();
 }
 
 /* WS */
