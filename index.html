@@ -145,6 +145,7 @@ function icon(name,rot=0){
         justify-content:center;
         position:relative;
       ">
+
         <div style="
           font-size:26px;
           color:${c};
@@ -167,42 +168,47 @@ function icon(name,rot=0){
             -1px  1px 0 #000,
              1px  1px 0 #000;
         ">${letter}</div>
+
       </div>
     `
   });
 }
 
-/* TRACK */
+/* TRACK (30 + fading) */
 function addTrack(id,lat,lon){
   if(!tracks[id]){
     tracks[id]={points:[],segments:[],crashBuffer:[],replayMarker:null};
   }
 
   const t=tracks[id];
-  const last=t.points.at(-1);
+  const now=Date.now();
 
-  t.points.push({lat,lon,time:Date.now()});
+  t.points.push({lat,lon,time:now});
+
+  const idx=t.points.length;
+  const opacity=Math.max(0.15, idx/30);
 
   const p=L.circleMarker([lat,lon],{
     radius:3,
     color:color(devices[id].name),
-    fillOpacity:1
+    fillOpacity:opacity
   }).addTo(map);
 
   t.segments.push(p);
 
+  const last=t.points.at(-2);
   if(last){
     const line=L.polyline([[last.lat,last.lon],[lat,lon]],{
       color:color(devices[id].name),
       weight:3,
-      dashArray:"6,10",
-      opacity:1
+      opacity:opacity,
+      dashArray:"6,10"
     }).addTo(map);
 
     t.segments.push(line);
   }
 
-  t.crashBuffer=t.points.filter(p=>Date.now()-p.time<30000);
+  t.crashBuffer=t.points.filter(p=>now-p.time<30000);
 
   while(t.points.length>30){
     t.points.shift();
@@ -249,17 +255,10 @@ function update(d){
   if(isNaN(lat)||isNaN(lon))return;
 
   const prev=devices[id];
-
   devices[id]={...devices[id],...d};
 
-  /* UI INIT FIX */
   if(!ui[id]){
-    ui[id]={
-      follow:false,
-      track:false,
-      watch:!!d.isWatched,
-      alarm:false
-    };
+    ui[id]={follow:false,track:false,watch:!!d.isWatched,alarm:false};
   }
 
   let rot=0;
@@ -346,13 +345,13 @@ function render(){
 
     el.innerHTML+=`
       <div class="device">
-        <b>${d.name}</b><br>
+        <b>${d.name}</b>
 
         <div class="info">
           📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
-          ⚡ Speed: ${d.speed||0} km/h<br>
-          🎯 Accuracy: ${d.accuracy||"-"} m<br>
-          🔋 Battery: ${d.battery||"-"}%<br>
+          ⚡ ${d.speed||0} km/h<br>
+          🎯 ${d.accuracy||"-"} m<br>
+          🔋 ${d.battery||"-"}%<br>
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
           📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
           🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
@@ -384,10 +383,7 @@ function toggleWatch(id){
   const s=!ui[id].watch;
   ui[id].watch=s;
 
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${s?"watch":"unwatch"}`,{
-    method:"POST"
-  });
-
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/${s?"watch":"unwatch"}`,{method:"POST"});
   render();
 }
 
@@ -395,10 +391,7 @@ function toggleAlarm(id){
   const s=!ui[id].alarm;
   ui[id].alarm=s;
 
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${s}`,{
-    method:"POST"
-  });
-
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${s}`,{method:"POST"});
   render();
 }
 
