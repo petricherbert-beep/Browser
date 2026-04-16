@@ -50,6 +50,16 @@ body{
   animation: glowPulse 15s ease-in-out infinite;
 }
 
+/* ALARM MAP MODE */
+#map.alarm{
+  animation: alarmFlash 0.6s infinite;
+  box-shadow:
+    0 0 10px rgba(255,0,0,0.5),
+    0 0 40px rgba(255,0,0,0.4),
+    0 0 120px rgba(255,0,0,0.3),
+    inset 0 0 120px rgba(255,0,0,0.25);
+}
+
 @keyframes glowPulse{
   0%,100%{
     box-shadow:
@@ -65,6 +75,11 @@ body{
   }
 }
 
+@keyframes alarmFlash{
+  0%,100%{filter:brightness(0.8) saturate(1.2);}
+  50%{filter:brightness(1.4) saturate(1.8);}
+}
+
 /* DEVICE */
 .device{
   padding:10px;
@@ -78,7 +93,6 @@ body{
   font-size:12px;
   line-height:1.4;
   opacity:0.9;
-  margin-top:6px;
 }
 
 /* BUTTONS */
@@ -91,11 +105,6 @@ button{
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
-  transition:0.15s;
-}
-
-button:hover{
-  border-color:rgba(0,255,200,0.5);
 }
 
 /* ACTIVE STATES */
@@ -125,38 +134,37 @@ const ui = {};
 const markers = {};
 const tracks = {};
 const anim = {};
-const replayState = {};
 const crashState = {};
+const replayState = {};
 
 let followId = null;
 
 /* MAP */
-const map = L.map("map").setView([47.09, 15.42], 13);
+const map = L.map("map").setView([47.09,15.42],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
 /* COLOR */
-function color(name){
-  name = (name||"").toLowerCase();
-  if(name.includes("oliver")) return "#3aa0ff";
-  if(name.includes("nicole")) return "#ff4d4d";
+function color(n){
+  n=(n||"").toLowerCase();
+  if(n.includes("oliver")) return "#3aa0ff";
+  if(n.includes("nicole")) return "#ff4d4d";
   return "#00ffb3";
 }
 
 /* BEARING */
-function bearing(lat1,lon1,lat2,lon2){
+function bearing(a,b,c,d){
   const toRad=x=>x*Math.PI/180;
   const toDeg=x=>x*180/Math.PI;
-  const d=toRad(lon2-lon1);
-  const y=Math.sin(d)*Math.cos(toRad(lat2));
-  const x=Math.cos(toRad(lat1))*Math.sin(toRad(lat2))-
-          Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(d);
+  const y=Math.sin(toRad(d-b))*Math.cos(toRad(c));
+  const x=Math.cos(toRad(a))*Math.sin(toRad(c))-
+          Math.sin(toRad(a))*Math.cos(toRad(c))*Math.cos(toRad(d-b));
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
 /* ICON */
 function icon(name,rot=0){
   const c=color(name);
-  const letter=(name?.[0]||"?").toUpperCase();
+  const l=(name?.[0]||"?").toUpperCase();
 
   return L.divIcon({
     className:"",
@@ -164,79 +172,107 @@ function icon(name,rot=0){
     iconAnchor:[20,20],
     html:`
       <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
-        <div style="
-          font-size:26px;
-          color:${c};
-          transform:rotate(${rot}deg);
-          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;
-        ">▲</div>
-
-        <div style="
-          position:absolute;
-          font-size:11px;
-          font-weight:800;
-          color:#fff;
-          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;
-        ">${letter}</div>
+        <div style="font-size:26px;color:${c};transform:rotate(${rot}deg);
+          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">
+          ▲
+        </div>
+        <div style="position:absolute;font-size:11px;font-weight:800;color:#fff;
+          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;">
+          ${l}
+        </div>
       </div>
     `
   });
 }
 
-/* TRACK (max 30 + fading logic basis) */
+/* TRACK */
 function addTrack(id,lat,lon){
-  if(!tracks[id]) tracks[id] = {points:[], layers:[], locked:false};
+  if(!tracks[id]) tracks[id]={points:[],layers:[],locked:false};
 
-  const t = tracks[id];
+  const t=tracks[id];
   if(t.locked) return;
 
-  const now = Date.now();
+  const now=Date.now();
   t.points.push({lat,lon,time:now});
 
-  const opacity = Math.max(0.15, t.points.length/30);
+  const op=Math.max(0.15,t.points.length/30);
 
-  const dot = L.circleMarker([lat,lon],{
+  const dot=L.circleMarker([lat,lon],{
     radius:3,
     color:color(devices[id].name),
-    fillOpacity:opacity
+    fillOpacity:op
   }).addTo(map);
 
   t.layers.push(dot);
 
-  const prev = t.points.at(-2);
+  const prev=t.points.at(-2);
   if(prev){
-    const line = L.polyline([[prev.lat,prev.lon],[lat,lon]],{
+    const line=L.polyline([[prev.lat,prev.lon],[lat,lon]],{
       color:color(devices[id].name),
       weight:3,
-      opacity:opacity,
+      opacity:op,
       dashArray:"6,10"
     }).addTo(map);
 
     t.layers.push(line);
   }
 
-  if(t.points.length > 30){
+  if(t.points.length>30){
     t.points.shift();
     const a=t.layers.shift();
     const b=t.layers.shift();
-    if(a) map.removeLayer(a);
-    if(b) map.removeLayer(b);
+    if(a)map.removeLayer(a);
+    if(b)map.removeLayer(b);
   }
 }
 
-/* LAST POINT RED */
+/* LAST RED */
 function markLastRed(id){
   const t=tracks[id];
   if(!t || !t.points.length) return;
 
-  const p = t.points.at(-1);
+  const p=t.points.at(-1);
 
   L.circleMarker([p.lat,p.lon],{
-    radius:6,
+    radius:7,
     color:"#ff0000",
     fillColor:"#ff0000",
     fillOpacity:1
   }).addTo(map);
+}
+
+/* REPLAY */
+function startReplay(id,speed=700){
+  const t=tracks[id];
+  if(!t || !t.points.length) return;
+
+  if(replayState[id]) return;
+
+  let i=0;
+
+  const m=L.circleMarker([t.points[0].lat,t.points[0].lon],{
+    radius:6,
+    color:"#fff",
+    fillColor:"#fff",
+    fillOpacity:1
+  }).addTo(map);
+
+  replayState[id]=m;
+
+  function step(){
+    if(i>=t.points.length){
+      map.removeLayer(m);
+      delete replayState[id];
+      return;
+    }
+
+    const p=t.points[i];
+    m.setLatLng([p.lat,p.lon]);
+    i++;
+    setTimeout(step,speed);
+  }
+
+  step();
 }
 
 /* UPDATE */
@@ -245,27 +281,39 @@ function update(d){
   const lat=+d.lat, lon=+d.lon;
   if(isNaN(lat)||isNaN(lon)) return;
 
-  const prev = devices[id];
-  devices[id] = {...devices[id], ...d};
+  const prev=devices[id];
+  devices[id]={...devices[id],...d};
 
   if(!ui[id]){
-    ui[id] = {follow:false,track:false,watch:false,alarm:false,replay:false};
+    ui[id]={follow:false,track:false,watch:false,alarm:false};
   }
 
-  let rot = 0;
-  if(prev) rot = bearing(prev.lat,prev.lon,lat,lon);
+  let rot=0;
+  if(prev) rot=bearing(prev.lat,prev.lon,lat,lon);
 
   if(!markers[id]){
-    markers[id] = L.marker([lat,lon],{icon:icon(d.name,rot)}).addTo(map);
+    markers[id]=L.marker([lat,lon],{icon:icon(d.name,rot)}).addTo(map);
   }
 
-  markers[id].setIcon(icon(d.name,rot));
   markers[id].setLatLng([lat,lon]);
+  markers[id].setIcon(icon(d.name,rot));
 
-  /* CRASH */
-  if(d.lastEvent === "Accident"){
-    if(tracks[id]) tracks[id].locked = true;
-    markLastRed(id);
+  /* ACCIDENT */
+  if(d.lastEvent==="Accident"){
+    if(!crashState[id]){
+      crashState[id]={active:true};
+
+      if(tracks[id]) tracks[id].locked=true;
+
+      markLastRed(id);
+
+      ui[id].alarm=true;
+
+      map.flyTo([lat,lon],17);
+      document.getElementById("map").classList.add("alarm");
+
+      startReplay(id,700);
+    }
   }
 
   if(ui[id].track) addTrack(id,lat,lon);
@@ -277,7 +325,7 @@ function update(d){
   render();
 }
 
-/* SMOOTH MOVE */
+/* SMOOTH */
 function smooth(id,lat,lon){
   const m=markers[id];
   if(!m) return;
@@ -299,41 +347,6 @@ function smooth(id,lat,lon){
   anim[id]=requestAnimationFrame(step);
 }
 
-/* REPLAY */
-function toggleReplay(id){
-  const t=tracks[id];
-  if(!t || !t.points.length) return;
-
-  if(replayState[id]) return;
-
-  let i=0;
-
-  const m = L.circleMarker([t.points[0].lat,t.points[0].lon],{
-    radius:6,
-    color:"#fff",
-    fillColor:"#fff",
-    fillOpacity:1
-  }).addTo(map);
-
-  replayState[id]=m;
-
-  function step(){
-    if(i>=t.points.length){
-      map.removeLayer(m);
-      delete replayState[id];
-      return;
-    }
-
-    const p=t.points[i];
-    m.setLatLng([p.lat,p.lon]);
-    i++;
-
-    setTimeout(step,180);
-  }
-
-  step();
-}
-
 /* UI */
 function render(){
   const el=document.getElementById("list");
@@ -349,11 +362,8 @@ function render(){
         <div class="info">
           📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
           ⚡ ${d.speed||0} km/h<br>
-          🎯 ${d.accuracy||"-"} m<br>
           🔋 ${d.battery||"-"}%<br>
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-          📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
-          🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
           🚨 ${d.lastEvent||""}
         </div>
 
@@ -363,7 +373,7 @@ function render(){
         <button class="${u.track?'active-track':''}" onclick="toggle('track','${id}')">TRACK</button>
         <button class="${u.watch?'active-watch':''}" onclick="toggleWatch('${id}')">WATCH</button>
         <button class="${u.alarm?'active-alarm':''}" onclick="toggleAlarm('${id}')">ALARM</button>
-        <button onclick="toggleReplay('${id}')">REPLAY</button>
+        <button onclick="startReplay('${id}',700)">REPLAY</button>
       </div>
     `;
   });
@@ -372,7 +382,7 @@ function render(){
 /* TOGGLES */
 function toggle(k,id){
   ui[id][k]=!ui[id][k];
-  if(k==="follow") followId = ui[id].follow ? id : null;
+  if(k==="follow") followId=ui[id].follow?id:null;
   render();
 }
 
@@ -401,12 +411,10 @@ function toggleFullscreen(){
 let ws;
 function connect(){
   ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-
   ws.onmessage=e=>{
     const d=JSON.parse(e.data);
     Array.isArray(d)?d.forEach(update):update(d);
   };
-
   ws.onclose=()=>setTimeout(connect,2000);
 }
 connect();
