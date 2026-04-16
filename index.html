@@ -19,6 +19,7 @@ body{
   overflow:hidden;
 }
 
+/* PANEL */
 #panel{
   width:390px;
   margin:1cm;
@@ -33,6 +34,7 @@ body{
     0 0 60px rgba(0,255,200,0.08);
 }
 
+/* MAP */
 #map{
   flex:1;
   margin:1cm;
@@ -48,6 +50,13 @@ body{
     inset 0 0 90px rgba(0,0,0,0.35);
 }
 
+@keyframes blink{
+  0%{opacity:1;}
+  50%{opacity:0.2;}
+  100%{opacity:1;}
+}
+
+/* DEVICE */
 .device{
   padding:10px;
   margin-bottom:10px;
@@ -59,9 +68,9 @@ body{
 .info{
   font-size:12px;
   line-height:1.4;
-  opacity:0.9;
 }
 
+/* BUTTON */
 button{
   margin:3px;
   padding:6px 10px;
@@ -78,11 +87,6 @@ button{
 .active-watch{ color:#ffd84d; border-color:#ffd84d; }
 .active-alarm{ color:#ff4d4d; border-color:#ff4d4d; }
 
-@keyframes blink{
-  0%{opacity:1;}
-  50%{opacity:0.2;}
-  100%{opacity:1;}
-}
 </style>
 
 </head>
@@ -91,6 +95,10 @@ button{
 
 <div id="panel">
   <b>🚗 GPS Control Center</b><br><br>
+
+<button onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
+
+  <hr>
   <div id="list"></div>
 </div>
 
@@ -132,8 +140,10 @@ function icon(name){
     className:"",
     iconSize:[40,40],
     iconAnchor:[20,20],
-    html:`<div style="font-size:26px;color:${c}">▲</div>
-          <div style="font-size:11px;color:#fff">${letter}</div>`
+    html:`
+      <div style="font-size:26px;color:${c};">▲</div>
+      <div style="font-size:11px;color:#fff">${letter}</div>
+    `
   });
 }
 
@@ -212,47 +222,52 @@ function updateTrackOpacity(id){
   });
 }
 
-/* ACCIDENT LOGIC */
+/* CLEAR */
+function clearTrack(id){
+  if(tracks[id]){
+    tracks[id].segments.forEach(s => map.removeLayer(s));
+    tracks[id] = { segments: [], points: [] };
+  }
+}
+
+/* ACCIDENT */
 function handleAccidentLogic(id, d){
   const now = Date.now();
 
   if(!accidentWatch[id]){
-    accidentWatch[id] = { accidentTime:null, alert:false };
+    accidentWatch[id] = { time:null, alert:false };
   }
 
   const a = accidentWatch[id];
 
   if(d.lastEvent === "Accident"){
-    if(!a.accidentTime){
-      a.accidentTime = now;
+    if(!a.time){
+      a.time = now;
       a.alert = false;
     }
   } else {
-    a.accidentTime = null;
+    a.time = null;
     a.alert = false;
     return;
   }
 
   const noMove = !d.isMotion && (d.speed ?? 0) < 1;
 
-  if(a.accidentTime && noMove && !a.alert){
-    if(now - a.accidentTime > 15000){
-      triggerCriticalAlert(id, d);
+  if(a.time && noMove && !a.alert){
+    if(now - a.time > 15000){
+      map.flyTo([d.lat, d.lon], 18);
+
+      markers[id].setIcon(L.divIcon({
+        html:`<div style="font-size:30px;color:red;animation:blink 1s infinite;">🚨</div>`
+      }));
+
+      markers[id].bindPopup("🚨 NO MOVEMENT AFTER ACCIDENT").openPopup();
+
+      alert(`🚨 ${d.name} – keine Bewegung nach Unfall!`);
+
       a.alert = true;
     }
   }
-}
-
-function triggerCriticalAlert(id, d){
-  map.flyTo([d.lat, d.lon], 18);
-
-  markers[id].setIcon(L.divIcon({
-    html:`<div style="font-size:30px;color:red;animation:blink 1s infinite;">🚨</div>`
-  }));
-
-  markers[id].bindPopup("🚨 NO MOVEMENT AFTER ACCIDENT").openPopup();
-
-  alert(`🚨 ${d.name} – keine Bewegung nach Unfall!`);
 }
 
 /* UPDATE */
@@ -311,6 +326,31 @@ function watch(id){
   });
 }
 
+function alarm(id){
+  devices[id].alarmActive=!devices[id].alarmActive;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${devices[id].alarmActive}`,{
+    method:"POST"
+  });
+
+  render();
+}
+
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
+}
+
+document.addEventListener("keydown",(e)=>{
+  if(e.key==="Escape" && document.fullscreenElement){
+    document.exitFullscreen();
+  }
+});
+
 /* RENDER */
 function render(){
   const el=document.getElementById("list");
@@ -321,20 +361,29 @@ function render(){
 
     el.innerHTML+=`
       <div class="device">
-        <b>${d.name}</b><br>
+        <b>${d.name}</b><br><br>
+
         📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
 
         <div class="info">
           ⚡ ${d.speed??0} km/h<br>
+          🎯 ${d.accuracy??"-"} m<br>
           🔋 ${d.battery??"-"}%<br>
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-          👀 ${u.watch?"WATCHED":"-"}<br>
-          ${d.lastEvent==="Accident"?"🚨 ACCIDENT":""}
+          📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
+          🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
+          👀 ${u.watch?"YES":"NO"}<br>
+          ${d.alarmActive?'<span style="color:red">ALARM</span>':""}
+          ${d.lastEvent==="Accident"?"<br>🚨 ACCIDENT":""}
         </div>
+
+        <hr>
 
         <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
         <button class="${u.track?'active-track':''}" onclick="toggleTrack('${id}')">TRACK</button>
         <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
+        <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
+        <button onclick="clearTrack('${id}')">CLEAR</button>
       </div>
     `;
   });
