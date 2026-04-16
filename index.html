@@ -88,16 +88,16 @@ button:hover{
 <script>
 
 /* STATE */
-const devices = {};
-const ui = {};
-const markers = {};
-const tracks = {};
-const anim = {};
-const crashState = {};
-let followId = null;
+const devices={};
+const ui={};
+const markers={};
+const tracks={};
+const anim={};
+const crashState={};
+let followId=null;
 
 /* MAP */
-const map = L.map("map").setView([47.09,15.42],13);
+const map=L.map("map").setView([47.09,15.42],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
 /* COLOR */
@@ -121,8 +121,8 @@ function getBearing(lat1,lon1,lat2,lon2){
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
-/* ICON (UNCHANGED LOOK, ROTATED ARROW ONLY) */
-function icon(name, rot=0){
+/* ICON (FIX: Buchstabe wirklich IM Pfeil zentriert) */
+function icon(name,rot=0){
   const c=color(name);
   const letter=(name?.[0]||"?").toUpperCase();
 
@@ -131,13 +131,19 @@ function icon(name, rot=0){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
+      <div style="
+        width:40px;height:40px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        position:relative;
+      ">
 
+        <!-- Pfeil -->
         <div style="
           font-size:26px;
           color:${c};
           transform:rotate(${rot}deg);
-          transition:transform 0.2s linear;
           text-shadow:
             -1px -1px 0 #000,
              1px -1px 0 #000,
@@ -145,17 +151,17 @@ function icon(name, rot=0){
              1px  1px 0 #000;
         ">▲</div>
 
+        <!-- Buchstabe exakt zentriert -->
         <div style="
           position:absolute;
           font-size:11px;
-          font-weight:700;
+          font-weight:800;
           color:#fff;
           text-shadow:
             -1px -1px 0 #000,
              1px -1px 0 #000,
             -1px  1px 0 #000,
              1px  1px 0 #000;
-          transform:translateY(6px);
         ">${letter}</div>
 
       </div>
@@ -163,7 +169,7 @@ function icon(name, rot=0){
   });
 }
 
-/* TRACK (30 points + dashed + fade base) */
+/* TRACK (30 points) */
 function addTrack(id,lat,lon){
   if(!tracks[id]){
     tracks[id]={points:[],segments:[],crashBuffer:[],replayMarker:null};
@@ -204,7 +210,7 @@ function addTrack(id,lat,lon){
   }
 }
 
-/* CRASH TRAIL */
+/* CRASH */
 function freezeCrashTrail(id){
   const t=tracks[id];
   if(!t)return;
@@ -233,7 +239,7 @@ function freezeCrashTrail(id){
   }
 }
 
-/* REPLAY (time correct) */
+/* REPLAY */
 function startReplay(id){
   const t=tracks[id];
   if(!t||!t.crashBuffer.length)return;
