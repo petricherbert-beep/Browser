@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 <head>
 <meta charset="utf-8" />
@@ -19,7 +18,7 @@ body{
   overflow:hidden;
 }
 
-/* PANEL GLOW (RESTORED) */
+/* PANEL GLOW */
 #panel{
   width:390px;
   margin:1cm;
@@ -27,51 +26,42 @@ body{
   background:rgba(10,15,25,0.55);
   padding:14px;
   border-radius:18px;
-
   border:1px solid rgba(0,255,200,0.12);
-
   box-shadow:
     0 0 0 1px rgba(0,0,0,0.6),
     0 0 20px rgba(0,255,200,0.15),
     0 0 60px rgba(0,255,200,0.08);
 }
 
-/* MAP GLOW (RESTORED) */
+/* MAP GLOW */
 #map{
   flex:1;
   margin:1cm;
   border-radius:20px;
   overflow:hidden;
   position:relative;
-
-  filter: contrast(1) brightness(0.75) saturate(0.95);
-
+  filter:contrast(1) brightness(0.75) saturate(0.95);
   box-shadow:
     0 0 15px rgba(0,255,200,0.25),
     0 0 50px rgba(0,255,200,0.35),
     0 0 100px rgba(0,255,200,0.25),
     0 0 150px rgba(0,255,200,0.15),
     inset 0 0 90px rgba(0,0,0,0.35);
-
   animation: glowPulse 15s ease-in-out infinite;
 }
 
-/* PULSE ANIMATION */
 @keyframes glowPulse{
-  10%,70%{
+  0%,100%{
     box-shadow:
-      0 0 10px rgba(0,255,200,0.2),
-      0 0 30px rgba(0,255,200,0.3),
-      0 0 40px rgba(0,255,200,0.2),
-      0 0 70px rgba(0,255,200,0.1);
-  }
-
-  70%{
-    box-shadow:
-      0 0 15px rgba(0,255,200,0.35),
-      0 0 30px rgba(0,255,200,0.5),
+      0 0 15px rgba(0,255,200,0.25),
       0 0 50px rgba(0,255,200,0.35),
-      0 0 80px rgba(0,255,200,0.2);
+      0 0 100px rgba(0,255,200,0.25);
+  }
+  50%{
+    box-shadow:
+      0 0 20px rgba(0,255,200,0.4),
+      0 0 70px rgba(0,255,200,0.5),
+      0 0 120px rgba(0,255,200,0.3);
   }
 }
 
@@ -90,7 +80,6 @@ body{
   margin-top:6px;
 }
 
-/* BUTTON BASE */
 button{
   margin:3px;
   padding:6px 10px;
@@ -107,38 +96,12 @@ button:hover{
   border-color:rgba(0,255,200,0.5);
 }
 
-/* ACTIVE GLOW STATES */
-.active-follow{
-  color:#3aa0ff;
-  border-color:#3aa0ff;
-  box-shadow:0 0 8px #3aa0ff, 0 0 20px rgba(58,160,255,0.4);
-}
-
-.active-track{
-  color:#00ffb3;
-  border-color:#00ffb3;
-  box-shadow:0 0 8px #00ffb3, 0 0 20px rgba(0,255,179,0.4);
-}
-
-.active-watch{
-  color:#ffd84d;
-  border-color:#ffd84d;
-  box-shadow:0 0 8px #ffd84d, 0 0 20px rgba(255,216,77,0.4);
-}
-
-.active-alarm{
-  color:#ff4d4d;
-  border-color:#ff4d4d;
-  box-shadow:0 0 8px #ff4d4d, 0 0 20px rgba(255,77,77,0.4);
-}
-
-@keyframes blink{
-  0%{opacity:1;}
-  50%{opacity:0.2;}
-  100%{opacity:1;}
-}
+/* ACTIVE STATES */
+.active-follow{color:#3aa0ff; box-shadow:0 0 10px #3aa0ff;}
+.active-track{color:#00ffb3; box-shadow:0 0 10px #00ffb3;}
+.active-watch{color:#ffd84d; box-shadow:0 0 10px #ffd84d;}
+.active-alarm{color:#ff4d4d; box-shadow:0 0 10px #ff4d4d;}
 </style>
-
 </head>
 
 <body>
@@ -161,6 +124,7 @@ const markers={};
 const tracks={};
 const anim={};
 const crashState={};
+const replayState={};
 let followId=null;
 
 /* MAP */
@@ -179,12 +143,10 @@ function color(n){
 function getBearing(lat1,lon1,lat2,lon2){
   const toRad=x=>x*Math.PI/180;
   const toDeg=x=>x*180/Math.PI;
-
   const dLon=toRad(lon2-lon1);
   const y=Math.sin(dLon)*Math.cos(toRad(lat2));
   const x=Math.cos(toRad(lat1))*Math.sin(toRad(lat2))-
           Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(dLon);
-
   return (toDeg(Math.atan2(y,x))+360)%360;
 }
 
@@ -199,30 +161,19 @@ function icon(name,rot=0){
     iconAnchor:[20,20],
     html:`
       <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
-
         <div style="
           font-size:26px;
           color:${c};
           transform:rotate(${rot}deg);
-          text-shadow:
-            -1px -1px 0 #000,
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000;
+          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;
         ">▲</div>
-
         <div style="
           position:absolute;
           font-size:11px;
           font-weight:800;
           color:#fff;
-          text-shadow:
-            -1px -1px 0 #000,
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000;
+          text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;
         ">${letter}</div>
-
       </div>
     `
   });
@@ -230,17 +181,16 @@ function icon(name,rot=0){
 
 /* TRACK */
 function addTrack(id,lat,lon){
-  if(!tracks[id]){
-    tracks[id]={points:[],segments:[],crashBuffer:[],replayMarker:null};
-  }
+  if(!tracks[id])tracks[id]={points:[],segments:[],locked:false};
 
   const t=tracks[id];
-  const now=Date.now();
+  if(t.locked)return;
 
+  const now=Date.now();
   t.points.push({lat,lon,time:now});
 
   const idx=t.points.length;
-  const opacity=Math.max(0.15, idx/30);
+  const opacity=Math.max(0.15,idx/30);
 
   const p=L.circleMarker([lat,lon],{
     radius:3,
@@ -262,9 +212,7 @@ function addTrack(id,lat,lon){
     t.segments.push(line);
   }
 
-  t.crashBuffer=t.points.filter(p=>now-p.time<30000);
-
-  while(t.points.length>30){
+  if(t.points.length>30){
     t.points.shift();
     const a=t.segments.shift();
     const b=t.segments.shift();
@@ -273,33 +221,27 @@ function addTrack(id,lat,lon){
   }
 }
 
+/* LAST POINT RED */
+function markLastRed(id){
+  const t=tracks[id];
+  if(!t||!t.points.length)return;
+
+  const p=t.points.at(-1);
+
+  L.circleMarker([p.lat,p.lon],{
+    radius:6,
+    color:"#ff0000",
+    fillColor:"#ff0000",
+    fillOpacity:1
+  }).addTo(map);
+}
+
 /* CRASH */
-function freezeCrashTrail(id){
+function freezeCrash(id){
   const t=tracks[id];
   if(!t)return;
 
-  const pts=t.crashBuffer;
-
-  for(let i=1;i<pts.length;i++){
-    L.polyline([
-      [pts[i-1].lat,pts[i-1].lon],
-      [pts[i].lat,pts[i].lon]
-    ],{
-      color:"#ff0000",
-      weight:5,
-      opacity:0.85
-    }).addTo(map);
-  }
-
-  const last=pts.at(-1);
-  if(last){
-    L.circleMarker([last.lat,last.lon],{
-      radius:7,
-      color:"#ff0000",
-      fillColor:"#ff0000",
-      fillOpacity:1
-    }).addTo(map);
-  }
+  t.locked=true;
 }
 
 /* UPDATE */
@@ -312,13 +254,11 @@ function update(d){
   devices[id]={...devices[id],...d};
 
   if(!ui[id]){
-    ui[id]={follow:false,track:false,watch:!!d.isWatched,alarm:false};
+    ui[id]={follow:false,track:false,watch:false,alarm:false,replay:false};
   }
 
   let rot=0;
-  if(prev){
-    rot=getBearing(prev.lat,prev.lon,lat,lon);
-  }
+  if(prev)rot=getBearing(prev.lat,prev.lon,lat,lon);
 
   if(!markers[id]){
     markers[id]=L.marker([lat,lon],{icon:icon(d.name,rot)}).addTo(map);
@@ -327,13 +267,16 @@ function update(d){
   markers[id].setIcon(icon(d.name,rot));
   markers[id].setLatLng([lat,lon]);
 
-  if(ui[id].track)addTrack(id,lat,lon);
+  if(d.lastEvent==="Accident"){
+    freezeCrash(id);
+    markLastRed(id);
+  }
+
+  if(ui[id].track) addTrack(id,lat,lon);
 
   smooth(id,lat,lon);
 
   if(followId===id)map.panTo([lat,lon]);
-
-  handleCrash(id,d);
 
   render();
 }
@@ -360,35 +303,6 @@ function smooth(id,lat,lon){
   anim[id]=requestAnimationFrame(step);
 }
 
-/* CRASH */
-function handleCrash(id,d){
-  const now=Date.now();
-
-  if(!crashState[id])crashState[id]={t:null,alert:false};
-
-  const c=crashState[id];
-
-  if(d.lastEvent==="Accident"){
-    if(!c.t){
-      c.t=now;
-      freezeCrashTrail(id);
-    }
-  }else{
-    c.t=null;
-    c.alert=false;
-    return;
-  }
-
-  const noMove=!d.isMotion&&(d.speed||0)<1;
-
-  if(c.t&&noMove&&!c.alert&&now-c.t>15000){
-    markers[id].setIcon(L.divIcon({
-      html:`<div style="font-size:30px;color:red;animation:blink 1s infinite;">🚨</div>`
-    }));
-    c.alert=true;
-  }
-}
-
 /* UI */
 function render(){
   const el=document.getElementById("list");
@@ -399,17 +313,13 @@ function render(){
 
     el.innerHTML+=`
       <div class="device">
-        <b>${d.name}</b>
+        <b>${d.name}</b><br><br>
 
         <div class="info">
           📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
           ⚡ ${d.speed||0} km/h<br>
-          🎯 ${d.accuracy||"-"} m<br>
           🔋 ${d.battery||"-"}%<br>
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-          📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
-          🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
-          👀 WATCH: ${u.watch?"YES":"NO"}<br>
           🚨 ${d.lastEvent==="Accident"?"ACCIDENT":""}
         </div>
 
@@ -425,11 +335,9 @@ function render(){
 }
 
 /* TOGGLES */
-function toggle(key,id){
-  ui[id][key]=!ui[id][key];
-  if(key==="follow"){
-    followId=ui[id].follow?id:null;
-  }
+function toggle(k,id){
+  ui[id][k]=!ui[id][k];
+  if(k==="follow")followId=ui[id].follow?id:null;
   render();
 }
 
@@ -449,23 +357,17 @@ function toggleAlarm(id){
 
 /* FULLSCREEN */
 function toggleFullscreen(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  }else{
-    document.exitFullscreen();
-  }
+  document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
 }
 
 /* WS */
 let ws;
 function connect(){
   ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-
   ws.onmessage=e=>{
     const d=JSON.parse(e.data);
     Array.isArray(d)?d.forEach(update):update(d);
   };
-
   ws.onclose=()=>setTimeout(connect,2000);
 }
 connect();
