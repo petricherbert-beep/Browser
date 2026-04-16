@@ -19,6 +19,7 @@ body{
   overflow:hidden;
 }
 
+/* PANEL GLOW (RESTORED) */
 #panel{
   width:390px;
   margin:1cm;
@@ -26,15 +27,52 @@ body{
   background:rgba(10,15,25,0.55);
   padding:14px;
   border-radius:18px;
+
   border:1px solid rgba(0,255,200,0.12);
+
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.6),
+    0 0 20px rgba(0,255,200,0.15),
+    0 0 60px rgba(0,255,200,0.08);
 }
 
+/* MAP GLOW (RESTORED) */
 #map{
   flex:1;
   margin:1cm;
   border-radius:20px;
   overflow:hidden;
-  filter:contrast(1) brightness(0.75) saturate(0.95);
+  position:relative;
+
+  filter: contrast(1) brightness(0.75) saturate(0.95);
+
+  box-shadow:
+    0 0 15px rgba(0,255,200,0.25),
+    0 0 50px rgba(0,255,200,0.35),
+    0 0 100px rgba(0,255,200,0.25),
+    0 0 150px rgba(0,255,200,0.15),
+    inset 0 0 90px rgba(0,0,0,0.35);
+
+  animation: glowPulse 15s ease-in-out infinite;
+}
+
+/* PULSE ANIMATION */
+@keyframes glowPulse{
+  10%,70%{
+    box-shadow:
+      0 0 10px rgba(0,255,200,0.2),
+      0 0 30px rgba(0,255,200,0.3),
+      0 0 40px rgba(0,255,200,0.2),
+      0 0 70px rgba(0,255,200,0.1);
+  }
+
+  70%{
+    box-shadow:
+      0 0 15px rgba(0,255,200,0.35),
+      0 0 30px rgba(0,255,200,0.5),
+      0 0 50px rgba(0,255,200,0.35),
+      0 0 80px rgba(0,255,200,0.2);
+  }
 }
 
 .device{
@@ -52,6 +90,7 @@ body{
   margin-top:6px;
 }
 
+/* BUTTON BASE */
 button{
   margin:3px;
   padding:6px 10px;
@@ -68,7 +107,7 @@ button:hover{
   border-color:rgba(0,255,200,0.5);
 }
 
-/* 🔥 ACTIVE GLOW STATES */
+/* ACTIVE GLOW STATES */
 .active-follow{
   color:#3aa0ff;
   border-color:#3aa0ff;
@@ -159,13 +198,7 @@ function icon(name,rot=0){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="
-        width:40px;height:40px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        position:relative;
-      ">
+      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
 
         <div style="
           font-size:26px;
@@ -195,7 +228,7 @@ function icon(name,rot=0){
   });
 }
 
-/* TRACK (30 + fade) */
+/* TRACK */
 function addTrack(id,lat,lon){
   if(!tracks[id]){
     tracks[id]={points:[],segments:[],crashBuffer:[],replayMarker:null};
