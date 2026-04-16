@@ -303,6 +303,8 @@ function render(){
         📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
 
         <div class="info">
+          ⚡ Speed: ${d.speed ?? 0} km/h<br>
+          🎯 Accuracy: ±${d.accuracy ?? "-"} m<br>
           🔋 ${d.battery??"-"}%<br>
           🚶 ${d.isMotion?"MOVING":"STILL"}<br>
           📶 ${d.isWifi?"WIFI":"MOBILE"}<br>
