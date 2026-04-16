@@ -46,7 +46,6 @@ body{
     0 0 100px rgba(0,255,200,0.25);
 }
 
-/* ALARM MAP */
 #map.alarm{
   animation: alarmFlash 0.5s infinite;
   box-shadow:
@@ -84,34 +83,13 @@ button{
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
-  transition:0.2s;
-}
-
-button:hover{
-  transform:translateY(-1px);
 }
 
 /* GLOW STATES */
-.active-follow{
-  color:#3aa0ff;
-  border-color:#3aa0ff;
-  box-shadow:0 0 10px #3aa0ff,0 0 25px rgba(58,160,255,0.3);
-}
-.active-track{
-  color:#00ffb3;
-  border-color:#00ffb3;
-  box-shadow:0 0 10px #00ffb3,0 0 25px rgba(0,255,179,0.3);
-}
-.active-watch{
-  color:#ffd84d;
-  border-color:#ffd84d;
-  box-shadow:0 0 10px #ffd84d,0 0 25px rgba(255,216,77,0.3);
-}
-.active-alarm{
-  color:#ff4d4d;
-  border-color:#ff4d4d;
-  box-shadow:0 0 10px #ff4d4d,0 0 25px rgba(255,77,77,0.3);
-}
+.active-follow{color:#3aa0ff; box-shadow:0 0 10px #3aa0ff;}
+.active-track{color:#00ffb3; box-shadow:0 0 10px #00ffb3;}
+.active-watch{color:#ffd84d; box-shadow:0 0 10px #ffd84d;}
+.active-alarm{color:#ff4d4d; box-shadow:0 0 10px #ff4d4d;}
 </style>
 </head>
 
@@ -141,8 +119,20 @@ let followId=null;
 const map=L.map("map").setView([47.09,15.42],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
 
+/* BEARING */
+function bearing(a,b,c,d){
+  const toRad=x=>x*Math.PI/180;
+  const toDeg=x=>x*180/Math.PI;
+
+  const y=Math.sin(toRad(d-b))*Math.cos(toRad(c));
+  const x=Math.cos(toRad(a))*Math.sin(toRad(c))-
+          Math.sin(toRad(a))*Math.cos(toRad(c))*Math.cos(toRad(d-b));
+
+  return (toDeg(Math.atan2(y,x))+360)%360;
+}
+
 /* ICON */
-function icon(name,color="#00ffb3"){
+function icon(name,color,rot=0){
   const letter=(name?.[0]||"?").toUpperCase();
 
   return L.divIcon({
@@ -155,13 +145,16 @@ function icon(name,color="#00ffb3"){
           font-size:26px;
           color:${color};
           -webkit-text-stroke:1px #000;
+          transform:rotate(${rot}deg);
         ">▲</div>
+
         <div style="
           position:absolute;
           font-size:11px;
           font-weight:800;
           color:#fff;
           text-shadow:0 0 6px #000;
+          transform:translateY(6px);
         ">${letter}</div>
       </div>
     `
@@ -174,13 +167,18 @@ function addTrack(id,lat,lon){
   const t=tracks[id];
   if(t.locked) return;
 
+  const c =
+    devices[id].name?.toLowerCase().includes("oliver") ? "#3aa0ff" :
+    devices[id].name?.toLowerCase().includes("nicole") ? "#ff4d4d" :
+    "#00ffb3";
+
   t.points.push({lat,lon});
 
   const op=Math.max(0.15,t.points.length/30);
 
   const dot=L.circleMarker([lat,lon],{
     radius:3,
-    color:"#00ffb3",
+    color:c,
     fillOpacity:op
   }).addTo(map);
 
@@ -189,11 +187,12 @@ function addTrack(id,lat,lon){
   const prev=t.points.at(-2);
   if(prev){
     const line=L.polyline([[prev.lat,prev.lon],[lat,lon]],{
-      color:"#00ffb3",
+      color:c,
       weight:3,
       opacity:op,
       dashArray:"6,10"
     }).addTo(map);
+
     t.layers.push(line);
   }
 
@@ -204,94 +203,48 @@ function addTrack(id,lat,lon){
   }
 }
 
-/* RED LAST POINT */
-function markLastRed(id){
-  const t=tracks[id];
-  if(!t||!t.points.length) return;
-  const p=t.points.at(-1);
-
-  L.circleMarker([p.lat,p.lon],{
-    radius:7,
-    color:"#ff0000",
-    fillColor:"#ff0000",
-    fillOpacity:1
-  }).addTo(map);
-}
-
-/* REPLAY */
-function startReplay(id,speed=700){
-  const t=tracks[id];
-  if(!t||!t.points.length) return;
-  if(replayState[id]) return;
-
-  let i=0;
-
-  const m=L.circleMarker([t.points[0].lat,t.points[0].lon],{
-    radius:6,
-    color:"#fff",
-    fillColor:"#fff",
-    fillOpacity:1
-  }).addTo(map);
-
-  replayState[id]=m;
-
-  function step(){
-    if(i>=t.points.length){
-      map.removeLayer(m);
-      delete replayState[id];
-      return;
-    }
-    m.setLatLng([t.points[i].lat,t.points[i].lon]);
-    i++;
-    setTimeout(step,speed);
-  }
-
-  step();
-}
-
-function stopReplay(id){
-  if(replayState[id]){
-    map.removeLayer(replayState[id]);
-    delete replayState[id];
-  }
-}
-
 /* UPDATE */
 function update(d){
   const id=d.deviceId;
   const lat=+d.lat, lon=+d.lon;
   if(isNaN(lat)||isNaN(lon)) return;
 
+  const prev=devices[id];
   devices[id]={...devices[id],...d,lastUpdate:Date.now()};
 
   if(!ui[id]) ui[id]={follow:false,track:false,watch:false,alarm:false};
 
-  const color =
+  const c =
     d.name?.toLowerCase().includes("oliver") ? "#3aa0ff" :
     d.name?.toLowerCase().includes("nicole") ? "#ff4d4d" :
     "#00ffb3";
 
+  let rot=0;
+  if(prev) rot=bearing(prev.lat,prev.lon,lat,lon);
+
   if(!markers[id]){
-    markers[id]=L.marker([lat,lon],{icon:icon(d.name,color)}).addTo(map);
+    markers[id]=L.marker([lat,lon],{icon:icon(d.name,c,rot)}).addTo(map);
   }
 
   markers[id].setLatLng([lat,lon]);
-  markers[id].setIcon(icon(d.name,color));
+  markers[id].setIcon(icon(d.name,c,rot));
 
   /* ACCIDENT */
   if(d.lastEvent==="Accident"){
     if(!crashState[id]){
-      crashState[id]={active:true};
+      crashState[id]={};
       if(tracks[id]) tracks[id].locked=true;
 
-      markLastRed(id);
+      L.circleMarker([lat,lon],{
+        radius:7,
+        color:"#ff0000",
+        fillColor:"#ff0000",
+        fillOpacity:1
+      }).addTo(map);
 
       ui[id].alarm=true;
-
       map.flyTo([lat,lon],17);
       document.getElementById("map").classList.add("alarm");
-
-      startReplay(id,700);
     }
   }
 
@@ -322,25 +275,21 @@ function render(){
           🔒 ${d.isLocked?"LOCKED":"UNLOCKED"}<br>
           👀 ${d.isWatched?"WATCHED":"NOT"}<br>
           📡 ${d.status??""}<br>
-          ⏱ ${new Date(d.lastUpdate).toLocaleTimeString()}<br>
           🚨 ${d.lastEvent??""}
         </div>
 
         <hr>
 
-        <button class="${u.follow?'active-follow':''}" onclick="toggle('follow','${id}')">FOLLOW</button>
-        <button class="${u.track?'active-track':''}" onclick="toggle('track','${id}')">TRACK</button>
+        <button class="${u.follow?'active-follow':''}" onclick="toggle('${id}','follow')">FOLLOW</button>
+        <button class="${u.track?'active-track':''}" onclick="toggle('${id}','track')">TRACK</button>
         <button class="${u.watch?'active-watch':''}" onclick="toggleWatch('${id}')">WATCH</button>
-        <button class="${u.alarm?'active-alarm':''}" onclick="toggleAlarm('${id}')">ALARM</button>
-        <button onclick="startReplay('${id}',700)">REPLAY</button>
-        <button onclick="stopReplay('${id}')">STOP</button>
       </div>
     `;
   });
 }
 
 /* TOGGLE */
-function toggle(k,id){
+function toggle(id,k){
   ui[id][k]=!ui[id][k];
   if(k==="follow") followId=ui[id].follow?id:null;
   render();
@@ -353,13 +302,6 @@ function toggleWatch(id){
   render();
 }
 
-function toggleAlarm(id){
-  const s=!ui[id].alarm;
-  ui[id].alarm=s;
-  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${s}`,{method:"POST"});
-  render();
-}
-
 /* WS */
 const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
 ws.onmessage=e=>{
@@ -367,7 +309,6 @@ ws.onmessage=e=>{
   Array.isArray(d)?d.forEach(update):update(d);
 };
 
-/* LOAD */
 fetch("https://gps-server-f9b6.onrender.com/devices")
 .then(r=>r.json())
 .then(a=>a.forEach(update));
