@@ -146,22 +146,35 @@ function icon(name,rot=0){
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-      <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;position:relative;">
-        <div style="
-          font-size:26px;
-          color:${c};
-          -webkit-text-stroke:1px #000;
-          transform:rotate(${rot}deg);
-        ">▲</div>
-        <div style="
-          position:absolute;
-          font-size:11px;
-          font-weight:700;
-          color:#fff;
-          text-shadow:0 0 6px #000;
-          transform:translateY(6px);
-        ">${letter}</div>
-      </div>
+      <div style="
+    width:40px;
+    height:40px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  ">
+
+    <div style="
+      font-size:26px;
+      color:${c};
+      -webkit-text-stroke:1px #000;
+      transform:rotate(${rot}deg);
+      line-height:40px;
+    ">▲</div>
+
+    <div style="
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      font-size:11px;
+      font-weight:700;
+      color:#fff;
+      text-shadow:0 0 6px #000;
+    ">${letter}</div>
+
+  </div>
     `
   });
 }
@@ -242,6 +255,10 @@ function update(d){
   const c=color(d.name);
 
   let rot=0;
+
+  if(!Object.values(devices).some(d => d.alarmActive)){
+  document.getElementById("map").classList.remove("alarm");
+}
   if(prev) rot=bearing(prev.lat,prev.lon,lat,lon);
 
   if(!markers[id]){
@@ -303,6 +320,8 @@ function render(){
         <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
         <button onclick="startReplay('${id}',700)">REPLAY</button>
         <button onclick="stopReplay('${id}')">STOP</button>
+        <button onclick="clearTrack('${id}')">CLEAR TRACK</button>
+        <button onclick="clearAlarm('${id}')">CLEAR ALARM</button>
       </div>
     `;
   });
@@ -312,6 +331,30 @@ function render(){
 function toggle(id,k){
   ui[id][k]=!ui[id][k];
   if(k==="follow") followId=ui[id].follow?id:null;
+  render();
+}
+
+  function clearTrack(id){
+  const t = tracks[id];
+  if(!t) return;
+
+  t.pts = [];
+
+  if(t.poly){
+    map.removeLayer(t.poly);
+    delete t.poly;
+  }
+}
+
+  function clearAlarm(id){
+  devices[id].alarmActive = false;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=false`,{
+    method:"POST"
+  });
+
+  document.getElementById("map").classList.remove("alarm");
+
   render();
 }
 
