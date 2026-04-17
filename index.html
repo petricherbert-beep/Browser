@@ -181,29 +181,81 @@ function icon(name,rot=0){
 
 /* ================= TRACK ================= */
 function addTrack(id,lat,lon){
-  const t = tracks[id] || (tracks[id]={pts:[]});
+  const t = tracks[id] || (tracks[id]={pts:[], dots:[]});
 
-  t.pts.push([lat,lon]);
-  if(t.pts.length>30) t.pts.shift();
+ const last = t.pts[t.pts.length-1];
 
-  if(t.poly) map.removeLayer(t.poly);
+if(last){
+  const dx = last[0]-lat;
+  const dy = last[1]-lon;
 
-  const c=color(devices[id].name);
-
-  t.poly = L.polyline(t.pts,{
-    color:c,
-    weight:3,
-    opacity:0.25,
-    dashArray:"6,10"
-  }).addTo(map);
-
-  L.circleMarker([lat,lon],{
-    radius:3,
-    color:c,
-    fillOpacity:0.4
-  }).addTo(map);
+  if(Math.sqrt(dx*dx+dy*dy) < 0.00003){
+    return; // ignorieren (~3m)
+  }
 }
 
+t.pts.push([lat,lon]);
+
+if(last){
+  const dx = last[0]-lat;
+  const dy = last[1]-lon;
+
+  if(Math.sqrt(dx*dx+dy*dy) < 0.00003){
+    return; // ignorieren (~3m)
+  }
+}
+  if(t.pts.length>30) t.pts.shift();
+
+  if(!t.poly){
+    const c=color(devices[id].name);
+
+    t.poly = L.polyline([],{
+      color:c,
+      weight:3,
+      opacity:0.25,
+      dashArray:"6,10"
+    }).addTo(map);
+  }
+
+  t.poly.setLatLngs(t.pts);
+
+  const dot = L.circleMarker([lat,lon],{
+    radius:3,
+    color:color(devices[id].name),
+    fillOpacity:0.4
+  }).addTo(map);
+
+  t.dots.push(dot);
+
+  // optional: alte Punkte entfernen
+  if(t.dots.length > 30){
+    const old = t.dots.shift();
+    map.removeLayer(old);
+  }
+}
+
+  function updateAlarmUI(){
+  const any = Object.values(devices).some(d => d.alarmActive);
+  document.getElementById("map").classList.toggle("alarm", any);
+}
+  
+function clearTrack(id){
+  const t = tracks[id];
+  if(!t) return;
+
+  t.pts = [];
+
+  if(t.poly){
+    map.removeLayer(t.poly);
+    delete t.poly;
+  }
+
+  if(t.dots){
+    t.dots.forEach(dot => map.removeLayer(dot));
+    t.dots = [];
+  }
+}
+  
 /* ================= REPLAY ================= */
 function startReplay(id,speed=700){
   const t = tracks[id];
@@ -248,6 +300,7 @@ function update(d){
   if(!lat||!lon) return;
 
   const prev=devices[id];
+
   devices[id]={...devices[id],...d};
 
   ui[id]=ui[id]||{follow:false,track:false,watch:false};
@@ -255,10 +308,11 @@ function update(d){
   const c=color(d.name);
 
   let rot=0;
-
-  if(!Object.values(devices).some(d => d.alarmActive)){
-  document.getElementById("map").classList.remove("alarm");
+  updateAlarmUI();
+  if(prev && prev.lat === lat && prev.lon === lon){
+  return;
 }
+  
   if(prev) rot=bearing(prev.lat,prev.lon,lat,lon);
 
   if(!markers[id]){
@@ -334,23 +388,12 @@ function toggle(id,k){
   ui[id][k]=!ui[id][k];
   if(k==="follow") followId=ui[id].follow?id:null;
   render();
-}
 
-  function clearTrack(id){
-  const t = tracks[id];
-  if(!t) return;
-
-  t.pts = [];
-
-  if(t.poly){
-    map.removeLayer(t.poly);
-    delete t.poly;
-  }
 }
 
   function clearAlarm(id){
   devices[id].alarmActive = false;
-
+  updateAlarmUI();
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=false`,{
     method:"POST"
   });
@@ -367,7 +410,10 @@ function watch(id){
 }
 
 function alarm(id){
+
+  
   devices[id].alarmActive=!devices[id].alarmActive;
+  updateAlarmUI();
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/alarm?active=${devices[id].alarmActive}`,{method:"POST"});
   render();
 }
@@ -379,15 +425,23 @@ function toggleFullscreen(){
 }
 
 /* ================= LOAD + WS ================= */
-fetch("https://gps-server-f9b6.onrender.com/devices")
-.then(r=>r.json())
-.then(a=>a.forEach(update));
+function connectWS(){
+  const ws = new WebSocket("wss://gps-server-f9b6.onrender.com");
 
-const ws=new WebSocket("wss://gps-server-f9b6.onrender.com");
-ws.onmessage=e=>{
-  const d=JSON.parse(e.data);
-  Array.isArray(d)?d.forEach(update):update(d);
-};
+  ws.onmessage = e=>{
+    const d = JSON.parse(e.data);
+    Array.isArray(d)?d.forEach(update):update(d);
+  };
+
+  ws.onclose = ()=>{
+    console.log("reconnect...");
+    setTimeout(connectWS,2000);
+  };
+
+  ws.onerror = ()=> ws.close();
+}
+
+connectWS();
 
 </script>
 
