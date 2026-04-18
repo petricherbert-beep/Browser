@@ -14,10 +14,12 @@ body{
   font-family:system-ui;
   background:#05070b;
   color:#c9d1d9;
+    display:flex;
   height:100vh;
-  display:flex;
+
   overflow:hidden;
 }
+
 
 #panel{
   width:390px;
@@ -45,15 +47,55 @@ body{
 #map{
   flex:1;
   margin:1cm;
+  height:100%;
   border-radius:20px;
   overflow:hidden;
+   box-shadow:
+    0 0 15px var(--glow),
+    0 0 60px rgba(0,255,200,0.25);
 }
+ 
+  
 .device{padding:10px;margin-bottom:10px;border:1px solid #222;border-radius:10px;}
 button{margin:3px;padding:6px;font-size:12px;}
 .active-follow{color:#3aa0ff}
 .active-track{color:#00ffb3}
 .active-watch{color:#ffd84d}
 .active-alarm{color:#ff4d4d}
+
+  :root{
+  --glow: rgba(0,255,200,0.35);
+}
+
+
+  #panel{
+  box-shadow:
+    0 0 10px rgba(0,255,200,0.4),
+    0 0 30px rgba(0,255,200,0.25),
+    0 0 80px rgba(0,255,200,0.15);
+}
+
+  
+/* INFO BOX GLOW */
+.info{
+  background: rgba(0,255,200,0.05);
+  border: 1px solid rgba(0,255,200,0.2);
+  box-shadow: 0 0 10px rgba(0,255,200,0.15);
+}
+
+/* MARKER GLOW */
+.leaflet-marker-icon,
+.leaflet-div-icon{
+  filter: drop-shadow(0 0 10px rgba(0,255,200,0.8));
+}
+
+
+
+  
+/* BUTTON HOVER GLOW */
+button:hover{
+  box-shadow: 0 0 12px rgba(0,255,200,0.4);
+}
 </style>
 </head>
 
@@ -163,42 +205,53 @@ function update(d){
 
   render();
 }
+  
 /* ================= UI ================= */
+let renderQueued = false;
+
 function render(){
-  const el=document.getElementById("list");
-  el.innerHTML="";
+  if(renderQueued) return;
 
-  Object.entries(devices).forEach(([id,d])=>{
-    const u=ui[id]||{};
+  renderQueued = true;
 
-    el.innerHTML+=`
-      <div class="device">
-        <b>${d.name || id}</b><br><br>
+  requestAnimationFrame(() => {
+    renderQueued = false;
 
-        📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
+    const el=document.getElementById("list");
+    el.innerHTML="";
 
-        <div class="info">
-          ⚡ Speed: ${d.speed ?? 0} km/h<br>
-          🎯 Accuracy: ±${d.accuracy ?? "-"} m<br>
-          🔋 Battery: ${d.battery ?? "-"}%<br>
-          📡 Status: ${d.status ?? "unknown"}<br>
-          🚶 Motion: ${d.isMotion ? "MOVING" : "STILL"}<br>
-          📶 Network: ${d.isWifi ? "WIFI" : "MOBILE"}<br>
-          🔒 Lock: ${d.isLocked ? "LOCKED" : "UNLOCKED"}<br>
-          👀 Watch: ${d.isWatched ? "YES" : "NO"}<br>
-          🚨 Alarm: ${d.alarmActive ? "ACTIVE" : "OFF"}<br>
-          ⏱ Last: ${d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : "-"}
+    Object.entries(devices).forEach(([id,d])=>{
+      const u=ui[id]||{};
+
+      el.innerHTML+=`
+        <div class="device">
+          <b>${d.name || id}</b><br><br>
+
+          📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
+
+          <div class="info">
+            ⚡ Speed: ${d.speed ?? 0} km/h<br>
+            🎯 Accuracy: ±${d.accuracy ?? "-"} m<br>
+            🔋 Battery: ${d.battery ?? "-"}%<br>
+            📡 Status: ${d.status ?? "unknown"}<br>
+            🚶 Motion: ${d.isMotion ? "MOVING" : "STILL"}<br>
+            📶 Network: ${d.isWifi ? "WIFI" : "MOBILE"}<br>
+            🔒 Lock: ${d.isLocked ? "LOCKED" : "UNLOCKED"}<br>
+            👀 Watch: ${d.isWatched ? "YES" : "NO"}<br>
+            🚨 Alarm: ${d.alarmActive ? "ACTIVE" : "OFF"}<br>
+            ⏱ Last: ${d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : "-"}
+          </div>
+
+          <hr>
+
+          <button onclick="toggle('${id}','follow')" class="${u.follow?'active-follow':''}">FOLLOW</button>
+          <button onclick="toggle('${id}','track')" class="${u.track?'active-track':''}">TRACK</button>
+          <button onclick="watch('${id}')">WATCH</button>
+          <button onclick="alarm('${id}')">ALARM</button>
+          <button onclick="clearTrack('${id}')">CLEAR TRACK</button>
         </div>
-
-        <hr>
-
-        <button onclick="toggle('${id}','follow')" class="${u.follow?'active-follow':''}">FOLLOW</button>
-        <button onclick="toggle('${id}','track')" class="${u.track?'active-track':''}">TRACK</button>
-        <button onclick="watch('${id}')">WATCH</button>
-        <button onclick="alarm('${id}')">ALARM</button>
-        <button onclick="clearTrack('${id}')">CLEAR TRACK</button>
-      </div>
-    `;
+      `;
+    });
   });
 }
 
