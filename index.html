@@ -19,6 +19,7 @@ body{
   overflow:hidden;
 }
 
+/* PANEL */
 #panel{
   width:380px;
   margin:1cm;
@@ -30,6 +31,7 @@ body{
   box-shadow:0 0 40px rgba(0,255,200,0.15);
 }
 
+/* MAP */
 #map{
   flex:1;
   margin:1cm;
@@ -39,6 +41,7 @@ body{
   filter:brightness(0.8) contrast(1.1);
 }
 
+/* DEVICE */
 .device{
   padding:10px;
   margin-bottom:10px;
@@ -53,6 +56,7 @@ body{
   line-height:1.4;
 }
 
+/* BUTTONS */
 button{
   margin:3px;
   padding:6px 10px;
@@ -62,23 +66,59 @@ button{
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
+  transition:0.2s;
 }
 
 button:hover{
-  border-color:#00ffb3;
-  box-shadow:0 0 10px rgba(0,255,179,0.3);
+  transform:translateY(-1px);
+  box-shadow:0 0 10px rgba(0,255,200,0.3);
 }
 
-.active-follow{color:#3aa0ff;border-color:#3aa0ff}
-.active-track{color:#00ffb3;border-color:#00ffb3}
-.active-alarm{color:#ff4d4d;border-color:#ff4d4d}
+/* FULLSCREEN BUTTON */
+.glow-btn{
+  margin-bottom:10px;
+  width:100%;
+  font-weight:700;
+  border:1px solid rgba(0,255,200,0.3);
+  box-shadow:0 0 10px rgba(0,255,200,0.3);
+}
+
+.glow-btn:hover{
+  box-shadow:0 0 15px rgba(0,255,200,0.6),
+             0 0 40px rgba(0,255,200,0.3);
+}
+
+/* ACTIVE STATES */
+.active-follow{
+  color:#3aa0ff;
+  border-color:#3aa0ff;
+  box-shadow:0 0 10px #3aa0ff;
+}
+
+.active-track{
+  color:#00ffb3;
+  border-color:#00ffb3;
+  box-shadow:0 0 10px #00ffb3;
+}
+
+.active-watch{
+  color:#ffd84d;
+  border-color:#ffd84d;
+  box-shadow:0 0 10px #ffd84d;
+}
+
+.active-alarm{
+  color:#ff4d4d;
+  border-color:#ff4d4d;
+  box-shadow:0 0 10px #ff4d4d;
+}
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <b>🚗 GPS Control Center</b>
+  <button class="glow-btn" onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
   <hr>
   <div id="list"></div>
 </div>
@@ -101,7 +141,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
   maxZoom:19
 }).addTo(map);
 
-/* SOCKET.IO */
+/* SOCKET */
 const socket = io("https://gps-server-f9b6.onrender.com");
 
 socket.on("location_update", update);
@@ -131,11 +171,10 @@ function icon(name){
 function update(d){
   const id=d.deviceId;
   const lat=+d.lat, lon=+d.lon;
-
   if(lat==null || lon==null) return;
 
   devices[id]={...devices[id],...d};
-  ui[id]=ui[id]||{follow:false,track:false};
+  ui[id]=ui[id]||{follow:false,track:false,watch:false};
 
   /* marker */
   if(!markers[id]){
@@ -176,6 +215,8 @@ function render(){
   Object.entries(devices).forEach(([id,d])=>{
     const u=ui[id];
 
+    const online = Date.now() - (d.timestamp||0) < 30000;
+
     el.innerHTML+=`
     <div class="device">
       <b>${d.name||id}</b><br><br>
@@ -187,15 +228,17 @@ function render(){
         🎯 ±${d.accuracy||"-"} m<br>
         🔋 ${d.battery||"-"}%<br>
         🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-        🚨 ${d.alarmActive?"ALARM":"OK"}
+        📡 ${online?"🟢 ONLINE":"🔴 OFFLINE"}<br>
+        ⏱ ${d.timestamp?new Date(d.timestamp).toLocaleTimeString():"-"}<br>
+        👀 WATCH: ${u?.watch?"YES":"NO"}
       </div>
 
       <hr>
 
       <button class="${u?.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
       <button class="${u?.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
+      <button class="${u?.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
       <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
-      <button onclick="clearTrack('${id}')">CLEAR</button>
     </div>
     `;
   });
@@ -218,8 +261,14 @@ function track(id){
   render();
 }
 
-function clearTrack(id){
-  if(tracks[id]) tracks[id].setLatLngs([]);
+function watch(id){
+  ui[id].watch=!ui[id].watch;
+
+  fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{
+    method:"POST"
+  }).catch(()=>{});
+
+  render();
 }
 
 function alarm(id){
@@ -233,7 +282,16 @@ function alarm(id){
   render();
 }
 
-/* LOAD */
+/* FULLSCREEN */
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen();
+  }else{
+    document.exitFullscreen();
+  }
+}
+
+/* INIT */
 fetch("https://gps-server-f9b6.onrender.com/devices")
 .then(r=>r.json())
 .then(a=>a.forEach(update));
