@@ -156,14 +156,64 @@ function color(n){
 
 /* ICON */
 function icon(name){
-  const c=color(name);
-  const letter=(name?.[0]||"?").toUpperCase();
+  const n = (name || "").toLowerCase();
+
+  let baseColor = "#00ffb3";
+  let letter = (name?.[0] || "?").toUpperCase();
+
+  if(n.includes("nicole")){
+    baseColor = "#ff3b3b"; // rot
+    letter = "N";
+  }
+
+  if(n.includes("oliver")){
+    baseColor = "#3aa0ff"; // blau
+    letter = "O";
+  }
 
   return L.divIcon({
-    className:"",
-    iconSize:[30,30],
-    iconAnchor:[15,15],
-    html:`<div style="color:${c};font-size:22px;text-shadow:0 0 6px black;">▲ ${letter}</div>`
+    className: "",
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    html: `
+      <div style="
+        position:relative;
+        width:40px;
+        height:40px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      ">
+
+        <!-- PFEIL -->
+        <div style="
+          position:absolute;
+          font-size:34px;
+          color:${baseColor};
+          text-shadow:
+            -1px -1px 0 #000,
+             1px -1px 0 #000,
+            -1px  1px 0 #000,
+             1px  1px 0 #000;
+        ">▲</div>
+
+        <!-- LETTER -->
+        <div style="
+          position:absolute;
+          font-size:13px;
+          font-weight:900;
+          color:#ffffff;
+          text-shadow:
+            -1px -1px 0 #000,
+             1px -1px 0 #000,
+            -1px  1px 0 #000,
+             1px  1px 0 #000;
+        ">
+          ${letter}
+        </div>
+
+      </div>
+    `
   });
 }
 
