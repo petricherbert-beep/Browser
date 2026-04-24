@@ -312,10 +312,14 @@ function track(id){
 }
 
 function watch(id){
-  ui[id].watch=!ui[id].watch;
+  ui[id].watch = !ui[id].watch;
 
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`,{
-    method:"POST"
+    method:"POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      watch: ui[id].watch
+    })
   }).catch(()=>{});
 
   render();
