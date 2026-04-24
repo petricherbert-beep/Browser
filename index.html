@@ -312,15 +312,17 @@ function track(id){
 }
 
 function watch(id){
-  ui[id].watch = d.isWatched;
-  // 1. sofort UI Feedback (optimistisch)
-  ui[id].watch = !ui[id].watch;
+  const newState = !ui[id].watch;
+
+  // UI sofort aktualisieren
+  ui[id].watch = newState;
   render();
 
-  // 2. Server informieren (Wahrheit)
+  // Server informieren
   fetch(`https://gps-server-f9b6.onrender.com/devices/${id}/watch`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ watch: newState })
   });
 }
 function alarm(id){
