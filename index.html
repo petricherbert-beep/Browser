@@ -312,6 +312,7 @@ function track(id){
 }
 
 function watch(id){
+  ui[id].watch = d.isWatched;
   // 1. sofort UI Feedback (optimistisch)
   ui[id].watch = !ui[id].watch;
   render();
