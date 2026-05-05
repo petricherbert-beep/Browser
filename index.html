@@ -76,42 +76,22 @@ body{
 .online{ color:#00ff9c; }
 .offline{ color:#ff4d4d; }
 
-/* BUTTONS */
-.row{
-  margin-top:8px;
-}
 
-button{
-  padding:6px 10px;
-  font-size:11px;
-  border-radius:10px;
-  border:1px solid rgba(0,255,200,0.2);
-  background:#0b1320;
-  color:#c9d1d9;
-  cursor:pointer;
-  margin:2px;
-  transition:0.2s;
-}
+/* BUTTONS */ 
+  button{ margin:3px; padding:6px 10px; font-size:12px; border-radius:10px; border:1px solid rgba(0,255,200,0.15); 
+         background:#0a141f; color:#c9d1d9; cursor:pointer; transition:0.2s; } 
+  button:hover{ transform:translateY(-1px); box-shadow:0 0 10px rgba(0,255,200,0.3); } 
+  /* FULLSCREEN BUTTON */ 
+  .glow-btn{ margin-bottom:10px; width:100%; font-weight:700; border:1px solid rgba(0,255,200,0.3); box-shadow:0 0 10px rgba(0,255,200,0.3); } 
+  .glow-btn:hover{ box-shadow:0 0 15px rgba(0,255,200,0.6), 0 0 40px rgba(0,255,200,0.3); } /* ACTIVE STATES */ 
+  
+  .active-follow{ color:#3aa0ff; border-color:#3aa0ff; box-shadow:0 0 10px #3aa0ff; } 
+  .active-track{ color:#00ffb3; border-color:#00ffb3; box-shadow:0 0 10px #00ffb3; } 
+  .active-watch{ color:#ffd84d; border-color:#ffd84d; box-shadow:0 0 10px #ffd84d; }
+  .active-alarm{ color:#ff4d4d; border-color:#ff4d4d; box-shadow:0 0 10px #ff4d4d; }
 
-button:hover{
-  box-shadow:0 0 10px rgba(0,255,200,0.4);
-}
 
-.active{
-  border-color:#00ffb3;
-  box-shadow:0 0 10px #00ffb3;
-}
 
-.follow{ color:#3aa0ff; border-color:#3aa0ff; }
-.track{ color:#00ffb3; border-color:#00ffb3; }
-.zoom{ color:#ffd84d; border-color:#ffd84d; }
-
-/* FULLSCREEN */
-.full{
-  width:100%;
-  margin-bottom:10px;
-  font-weight:700;
-}
 </style>
 </head>
 
