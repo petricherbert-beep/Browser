@@ -1,171 +1,406 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-<meta charset="utf-8" />
-<title>🛰️ GPS Control Center PRO</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛰️ GPS Control Center PRO</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- Leaflet & Socket.IO -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-<style>
-:root { --accent: #00ffb3; --bg-dark: #05070b; }
-body { margin:0; font-family: system-ui; background: var(--bg-dark); color: #c9d1d9; height: 100vh; display: flex; overflow: hidden; }
+    <style>
+        :root {
+            --accent: #00e676;
+            --nicole: #e91e63;
+            --oliver: #2196f3;
+            --bg-dark: #0d1117;
+            --panel-bg: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+        }
 
-/* LOGIN OVERLAY */
-#login-overlay {
-  position: fixed; inset: 0; background: var(--bg-dark); z-index: 9999;
-  display: flex; align-items: center; justify-content: center; flex-direction: column;
-}
-.login-box { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 20px; border: 1px solid var(--accent); text-align: center; }
-input[type="password"] { background: #162431; border: 1px solid var(--accent); color: white; padding: 10px; border-radius: 8px; margin: 10px 0; outline: none; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
 
-/* UI */
-#panel { width: 380px; margin: 20px; overflow: auto; background: rgba(10,15,25,0.85); padding: 20px; border-radius: 18px; border: 1px solid rgba(0,255,200,0.15); backdrop-filter: blur(10px); z-index: 1000; }
-#map { flex: 1; margin: 20px 20px 20px 0; border-radius: 20px; overflow: hidden; background: #111; }
-.device { padding: 15px; margin-bottom: 12px; border: 1px solid rgba(0,255,200,0.1); border-radius: 14px; background: rgba(255,255,255,0.02); }
-.status-pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: bold; }
-.online { background: rgba(0, 255, 179, 0.2); color: #00ffb3; }
-.offline { background: rgba(255, 77, 77, 0.2); color: #ff4d4d; }
-.btn-group { display: flex; gap: 5px; margin-top: 10px; }
-button { flex: 1; padding: 8px 5px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid rgba(0,255,200,0.2); background: #0a141f; color: #c9d1d9; cursor: pointer; }
-button:hover { background: #162431; }
-.active-follow { background: #3aa0ff !important; }
-.active-track { background: var(--accent) !important; color: #05070b; }
-.arrow-icon { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 25px solid var(--accent); }
-</style>
+        /* 🔒 LOGIN OVERLAY */
+        #login-overlay {
+            position: fixed;
+            inset: 0;
+            background: #05070b;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-box {
+            background: var(--panel-bg);
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid var(--accent);
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0, 230, 118, 0.15);
+        }
+
+        .login-box input {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            width: 240px;
+            outline: none;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        /* 📱 SIDEBAR */
+        #sidebar {
+            width: 400px;
+            display: flex;
+            flex-direction: column;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border);
+            z-index: 1000;
+            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        h2 {
+            color: var(--accent);
+            font-size: 18px;
+            margin: 0 0 15px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            letter-spacing: 1px;
+        }
+
+        /* 📍 DEVICE CARDS */
+        .device-card {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 15px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .device-card:hover { border-color: #8b949e; }
+        .device-card.active { border-color: var(--accent); background: rgba(0, 230, 118, 0.02); }
+
+        .name-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 17px;
+            margin-bottom: 10px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 12px;
+        }
+
+        .badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge-online { background: rgba(0, 230, 118, 0.15); color: var(--accent); }
+        .badge-offline { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+        .badge-locked { background: rgba(33, 150, 243, 0.15); color: #2196f3; }
+        .badge-accident { background: #f85149; color: white; animation: pulse 1s infinite; }
+
+        /* 🎮 BUTTONS */
+        .btn-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        button {
+            background: #21262d;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 9px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover { background: #30363d; border-color: #8b949e; }
+        button.active-follow { border-color: var(--oliver); color: var(--oliver); }
+        button.active-track { border-color: var(--accent); color: var(--accent); }
+        button.active-watch { border-color: #ffd84d; color: #ffd84d; }
+        button.active-alarm { background: #f85149; color: white; border-color: #f85149; }
+
+        /* 🌐 GEOFENCES */
+        .gf-item {
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            margin-bottom: 5px;
+        }
+
+        .gf-del { color: #f85149; cursor: pointer; font-weight: bold; font-size: 14px; padding: 5px; }
+
+        /* 🗺️ MAP */
+        #map { flex: 1; }
+
+        /* 🏹 MARKER ICON */
+        .marker-container {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .marker-arrow {
+            width: 0; height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 38px solid var(--oliver);
+            filter: drop-shadow(0 0 4px rgba(0,0,0,0.6));
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .marker-letter {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: 900;
+            font-size: 16px;
+            text-shadow: 0 0 3px black;
+            pointer-events: none;
+        }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
 </head>
 
 <body>
 
-<!-- Passwort Abfrage -->
 <div id="login-overlay">
-  <div class="login-box">
-    <h2 style="color: var(--accent)">🔑 Restricted Access</h2>
-    <p>Bitte API-Key eingeben:</p>
-    <input type="password" id="api-input" placeholder="Passwort...">
-    <br>
-    <button onclick="attemptLogin()" style="width: 100%; margin-top: 10px;">LOGIN</button>
-  </div>
+    <div class="login-box">
+        <h1 style="color: var(--accent); margin-top: 0;">🛰️ GPS CONTROL</h1>
+        <p style="opacity: 0.7;">Bitte API-Key eingeben</p>
+        <input type="password" id="pw_field" placeholder="Passwort..." onkeydown="if(event.key==='Enter') login()">
+        <br>
+        <button onclick="login()" style="width:100%; padding:14px; background:var(--accent); color:black; font-size: 14px;">ZUGRIFF ERTEILEN</button>
+    </div>
 </div>
 
-<div id="panel">
-  <h2 style="margin:0; color: var(--accent)">🛰️ ADMIN CENTER</h2>
-  <p id="stats" style="font-size: 11px; opacity: 0.6;">Nicht angemeldet</p>
-  <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0;">
-  <div id="list"></div>
+<div id="sidebar">
+    <div class="scroll-area">
+        <h2>📡 GERÄTE <span id="count" style="opacity:0.4">0</span></h2>
+        <div id="device-list"></div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin: 25px 0;">
+
+        <h2>🌐 GEOFENCES</h2>
+        <p style="font-size:11px; opacity:0.5; margin-top:-10px">Klicke auf die Karte für neue Zonen.</p>
+        <div id="gf-list"></div>
+    </div>
+
+    <div style="padding:15px; background: #0d1117; border-top: 1px solid var(--border); font-size: 11px;">
+        <div style="display:flex; justify-content: space-between;">
+            <span>Server: <b id="srv-url">---</b></span>
+            <span id="status" style="color:red">● Offline</span>
+        </div>
+    </div>
 </div>
 
 <div id="map"></div>
 
 <script>
-const BASE = "https://gps-server-f9b6.onrender.com";
-let API_KEY = sessionStorage.getItem("gps_admin_key");
+    const BASE = "https://gps-server-f9b6.onrender.com";
+    let API_KEY = sessionStorage.getItem("gps_key");
 
-const devices = {}, ui = {}, markers = {}, tracks = {}, gfLayers = {};
-let followId = null;
+    const devices = {}, ui = {}, markers = {}, tracks = {}, gfCircles = {};
+    let followId = null;
 
-// MAP
-const map = L.map("map", { zoomControl: false }).setView([47.09, 15.42], 13);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+    // MAP INITIALISIERUNG
+    const map = L.map("map", { zoomControl: false }).setView([47.09, 15.42], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-function attemptLogin() {
-  const input = document.getElementById("api-input").value;
-  if(!input) return;
-  API_KEY = input;
-  sessionStorage.setItem("gps_admin_key", input);
-  initApp();
-}
+    function login() {
+        const val = document.getElementById("pw_field").value;
+        if (!val) return;
+        API_KEY = val;
+        sessionStorage.setItem("gps_key", val);
+        init();
+    }
 
-async function initApp() {
-  const res = await apiFetch("/devices");
-  if (res.status === 401) {
-    alert("Falscher API-Key!");
-    sessionStorage.removeItem("gps_admin_key");
-    location.reload();
-    return;
-  }
-  
-  document.getElementById("login-overlay").style.display = "none";
-  document.getElementById("stats").innerText = "📡 Verbunden: " + BASE;
+    async function init() {
+        const res = await api("/devices");
+        if (res.status === 401) {
+            alert("Passwort falsch!");
+            sessionStorage.removeItem("gps_key");
+            location.reload();
+            return;
+        }
 
-  const socket = io(BASE, { extraHeaders: { "x-api-key": API_KEY } });
-  socket.on("location_update", updateDevice);
-  socket.on("geofences_updated", drawGeofences);
-  
-  const initialData = await res.json();
-  initialData.forEach(updateDevice);
-  
-  const gfRes = await apiFetch("/geofences");
-  drawGeofences(await gfRes.json());
-}
+        document.getElementById("login-overlay").style.display = "none";
+        document.getElementById("status").innerText = "● Verbunden";
+        document.getElementById("status").style.color = "var(--accent)";
+        document.getElementById("srv-url").innerText = BASE.replace("https://", "");
 
-async function apiFetch(url, options = {}) {
-  return fetch(BASE + url, {
-    ...options,
-    headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(options.headers || {}) }
-  });
-}
+        const socket = io(BASE, { extraHeaders: { "x-api-key": API_KEY } });
+        socket.on("location_update", updateDevice);
+        socket.on("geofences_updated", (list) => drawGeofences(list));
 
-function updateDevice(d) {
-  const id = d.deviceId;
-  if (!d.lat || !d.lon) return;
-  devices[id] = { ...devices[id], ...d };
-  ui[id] = ui[id] || { follow: false, track: false };
+        const data = await res.json();
+        data.forEach(updateDevice);
+        refreshGF();
+    }
 
-  const icon = L.divIcon({
-    className: 'custom-div-icon',
-    html: `<div class="arrow-icon" style="transform: rotate(${d.bearing || 0}deg); border-bottom-color: ${id.includes('nicole') ? '#ff2d55' : '#00ffb3'}"></div>`,
-    iconSize: [20, 25], iconAnchor: [10, 12]
-  });
+    async function api(path, opt = {}) {
+        return fetch(BASE + path, {
+            ...opt,
+            headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) }
+        });
+    }
 
-  if (!markers[id]) markers[id] = L.marker([d.lat, d.lon], { icon: icon }).addTo(map);
-  else { markers[id].setLatLng([d.lat, d.lon]); markers[id].setIcon(icon); }
+    function updateDevice(d) {
+        const id = d.deviceId.toLowerCase();
+        devices[id] = { ...devices[id], ...d };
+        ui[id] = ui[id] || { track: false };
 
-  if (ui[id].track) {
-    if (!tracks[id]) tracks[id] = L.polyline([], { color: id.includes('nicole') ? '#ff2d55' : '#00ffb3', weight: 3 }).addTo(map);
-    const pts = tracks[id].getLatLngs(); pts.push([d.lat, d.lon]);
-    if (pts.length > 500) pts.shift();
-    tracks[id].setLatLngs(pts);
-  }
-  if (followId === id) map.panTo([d.lat, d.lon]);
-  renderList();
-}
+        const color = id.includes("nicole") ? "#e91e63" : "#2196f3";
+        const letter = (d.name || id).charAt(0).toUpperCase();
 
-function drawGeofences(list) {
-  Object.values(gfLayers).forEach(l => map.removeLayer(l));
-  list.forEach(gf => {
-    gfLayers[gf.id] = L.circle([gf.lat, gf.lon], { radius: gf.radius || 100, color: '#3aa0ff', fillOpacity: 0.1 }).addTo(map);
-  });
-}
+        const icon = L.divIcon({
+            className: 'custom-marker',
+            html: `<div class="marker-container">
+                    <div class="marker-arrow" style="transform: rotate(${d.bearing || 0}deg); border-bottom-color: ${color}"></div>
+                    <div class="marker-letter">${letter}</div>
+                   </div>`,
+            iconSize: [40, 40], iconAnchor: [20, 20]
+        });
 
-function renderList() {
-  const el = document.getElementById("list");
-  el.innerHTML = "";
-  Object.values(devices).sort((a,b) => b.lastSeen - a.lastSeen).forEach(d => {
-    const isOnline = (Date.now() - d.lastSeen < 70000);
-    el.innerHTML += `
-      <div class="device">
-        <div style="display:flex; justify-content:space-between;">
-          <b>${d.name || d.deviceId}</b>
-          <span class="status-pill ${isOnline?'online':'offline'}">${isOnline?'ONLINE':'OFFLINE'}</span>
-        </div>
-        <div style="font-size: 11px; opacity: 0.7; margin-top:5px">🔋 ${d.battery||'--'}% | 💨 ${(d.speed*3.6).toFixed(1)} km/h</div>
-        <div class="btn-group">
-          <button class="${followId===d.deviceId?'active-follow':''}" onclick="toggleFollow('${d.deviceId}')">FOLLOW</button>
-          <button class="${ui[d.deviceId].track?'active-track':''}" onclick="toggleTrack('${d.deviceId}')">TRACK</button>
-          <button onclick="toggleAlarm('${d.deviceId}', ${!d.alarmActive})">${d.alarmActive?'STOP':'ALARM'}</button>
-        </div>
-      </div>`;
-  });
-}
+        if (!markers[id]) {
+            markers[id] = L.marker([d.lat, d.lon], { icon: icon }).addTo(map);
+            markers[id].on('click', () => select(id));
+        } else {
+            markers[id].setLatLng([d.lat, d.lon]);
+            markers[id].setIcon(icon);
+        }
 
-function toggleFollow(id) { followId = (followId === id) ? null : id; renderList(); }
-function toggleTrack(id) { ui[id].track = !ui[id].track; renderList(); }
-async function toggleAlarm(id, active) { await apiFetch(`/devices/${id}/alarm?active=${active}`, { method: "POST" }); }
+        if (ui[id].track) {
+            if (!tracks[id]) tracks[id] = L.polyline([], { color: color, weight: 4, opacity: 0.5 }).addTo(map);
+            const pts = tracks[id].getLatLngs();
+            pts.push([d.lat, d.lon]);
+            if (pts.length > 500) pts.shift();
+            tracks[id].setLatLngs(pts);
+        }
 
-// Auto-Login if key exists
-if (API_KEY) initApp();
+        if (followId === id) map.panTo([d.lat, d.lon]);
+        render();
+    }
+
+    function render() {
+        const el = document.getElementById("device-list");
+        el.innerHTML = "";
+        const sorted = Object.values(devices).sort((a,b) => b.lastSeen - a.lastSeen);
+        document.getElementById("count").innerText = sorted.length;
+
+        sorted.forEach(d => {
+            const id = d.deviceId.toLowerCase();
+            const isOnline = (Date.now() - d.lastSeen < 70000);
+            const isLocked = d.isLocked || d.isWifi;
+            const timeStr = new Date(d.timestamp).toLocaleTimeString();
+
+            el.innerHTML += `
+                <div class="device-card ${followId === id ? 'active' : ''}" onclick="select('${id}')">
+                    <div class="name-row">
+                        <span>${d.name || id}</span>
+                        <div>
+                            ${d.accident ? '<span class="badge badge-accident">UNFALL</span>' : ''}
+                            <span class="badge ${isOnline ? 'badge-online' : 'badge-offline'}">${isOnline ? 'Online' : 'Offline'}</span>
+                        </div>
+                    </div>
+                    <div class="stat-grid">
+                        <div>📍 ${d.lat.toFixed(6)}, ${d.lon.toFixed(6)}</div>
+                        <div>🔋 ${d.battery || '--'}%</div>
+                        <div>💨 ${(d.speed * 3.6).toFixed(1)} km/h</div>
+                        <div>🎯 +/- ${Math.round(d.accuracy || 0)}m</div>
+                    </div>
+                    <div style="font-size:10px; opacity:0.6; margin-bottom:12px; line-height:1.4">
+                        ${isLocked ? '🔒 GPS LOKAL FIXIERT' : '📡 LIVE GPS'} | ${timeStr}<br>
+                        ${d.isWatched ? '⚠️ BEOBACHTET VON ' + (d.watcherName || 'Jemand') : 'Aktuell nicht beobachtet'}
+                    </div>
+                    <div class="btn-row">
+                        <button class="${followId === id ? 'active-follow' : ''}" onclick="event.stopPropagation(); toggleFollow('${id}')">FOLLOW</button>
+                        <button class="${ui[id].track ? 'active-track' : ''}" onclick="event.stopPropagation(); toggleTrack('${id}')">TRACK</button>
+                        <button class="${d.isWatched ? 'active-watch' : ''}" onclick="event.stopPropagation(); toggleWatch('${id}')">WATCH</button>
+                        <button class="${d.alarmActive ? 'active-alarm' : ''}" onclick="event.stopPropagation(); toggleAlarm('${id}')">${d.alarmActive ? 'STOP' : 'ALARM'}</button>
+                    </div>
+                </div>`;
+        });
+    }
+
+    function drawGeofences(list) {
+        Object.values(gfCircles).forEach(c => map.removeLayer(c));
+        const listEl = document.getElementById("gf-list");
+        listEl.innerHTML = "";
+        list.forEach(gf => {
+            gfCircles[gf.id] = L.circle([gf.lat, gf.lon], { radius: gf.radius, color: '#00e676', weight: 1, fillOpacity: 0.1 }).addTo(map);
+            listEl.innerHTML += `<div class="gf-item"><span>📍 ${gf.name} (${Math.round(gf.radius)}m)</span><span class="gf-del" onclick="delGF('${gf.id}')">✕</span></div>`;
+        });
+    }
+
+    map.on('click', async (e) => {
+        const name = prompt("Name der neuen Zone?"); if (!name) return;
+        const rad = prompt("Radius (m)?", "100"); if (!rad) return;
+        await api("/geofences", { method: "POST", body: JSON.stringify({ name, lat: e.latlng.lat, lon: e.latlng.lng, radius: parseInt(rad) }) });
+        refreshGF();
+    });
+
+    function select(id) { followId = id; map.panTo([devices[id].lat, devices[id].lon]); render(); }
+    function toggleFollow(id) { followId = (followId === id) ? null : id; render(); }
+    function toggleTrack(id) { ui[id].track = !ui[id].track; if(!ui[id].track && tracks[id]) { map.removeLayer(tracks[id]); delete tracks[id]; } render(); }
+    async function toggleWatch(id) { const d = devices[id]; const action = d.isWatched ? 'unwatch' : 'watch'; await api(`/devices/${id}/${action}?watcherId=web_center&watcherName=Web-Center`, { method: "POST" }); d.isWatched = !d.isWatched; render(); }
+    async function toggleAlarm(id) { const act = !devices[id].alarmActive; await api(`/devices/${id}/alarm?active=${act}`, { method: "POST" }); devices[id].alarmActive = act; render(); }
+    async function delGF(id) { if(confirm("Zone löschen?")) await api(`/geofences/${id}`, { method: "DELETE" }); refreshGF(); }
+    async function refreshGF() { const r = await api("/geofences"); drawGeofences(await r.json()); }
+
+    if (API_KEY) init();
 </script>
 </body>
 </html>
