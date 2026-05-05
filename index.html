@@ -12,216 +12,66 @@
 
     <style>
         :root {
-            --accent: #00e676; 
-            --nicole: #e91e63; 
-            --oliver: #2196f3;
-            --bg-dark: #0d1117; 
-            --panel-bg: #161b22; 
-            --border: #30363d;
-            --text: #c9d1d9;
+            --accent: #00e676; --nicole: #e91e63; --oliver: #2196f3;
+            --bg-dark: #0d1117; --panel-bg: #161b22; --border: #30363d; --text: #c9d1d9;
         }
 
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: var(--bg-dark);
-            color: var(--text);
-            height: 100vh;
-            display: flex;
-            overflow: hidden;
-        }
+        body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-dark); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
 
         /* 🔒 LOGIN OVERLAY */
-        #login-overlay {
-            position: fixed;
-            inset: 0;
-            background: #05070b;
-            z-index: 10000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .login-box {
-            background: var(--panel-bg);
-            padding: 40px;
-            border-radius: 20px;
-            border: 1px solid var(--accent);
-            text-align: center;
-            box-shadow: 0 0 50px rgba(0, 230, 118, 0.15);
-        }
-
-        .login-box input {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            color: white;
-            padding: 12px;
-            border-radius: 8px;
-            width: 240px;
-            outline: none;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 16px;
-        }
+        #login-overlay { position: fixed; inset: 0; background: #05070b; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .login-box { background: var(--panel-bg); padding: 40px; border-radius: 20px; border: 1px solid var(--accent); text-align: center; box-shadow: 0 0 50px rgba(0, 230, 118, 0.15); }
+        .login-box input { background: var(--bg-dark); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 8px; width: 240px; text-align: center; margin-bottom: 20px; font-size: 16px; outline: none; }
 
         /* 📱 SIDEBAR */
-        #sidebar {
-            width: 420px;
-            display: flex;
-            flex-direction: column;
-            background: var(--panel-bg);
-            border-right: 1px solid var(--border);
-            z-index: 1000;
-            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
-        }
-
-        .scroll-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-        }
-
-        .header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        h2 {
-            color: var(--accent);
-            font-size: 18px;
-            margin: 0;
-            letter-spacing: 1px;
-        }
+        #sidebar { width: 420px; display: flex; flex-direction: column; background: var(--panel-bg); border-right: 1px solid var(--border); z-index: 1000; box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5); }
+        .scroll-area { flex: 1; overflow-y: auto; padding: 20px; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h2 { color: var(--accent); font-size: 18px; margin: 0; letter-spacing: 1px; }
 
         /* 📍 DEVICE CARDS */
-        .device-card {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 16px;
-            margin-bottom: 15px;
-            transition: all 0.2s ease;
-            cursor: pointer;
-        }
-
+        .device-card { background: var(--bg-dark); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 15px; cursor: pointer; transition: 0.2s; }
         .device-card:hover { border-color: #8b949e; }
         .device-card.active { border-color: var(--accent); background: rgba(0, 230, 118, 0.03); }
 
-        .name-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: bold;
-            font-size: 17px;
-            margin-bottom: 10px;
-        }
+        .name-row { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 17px; margin-bottom: 10px; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; opacity: 0.9; margin-bottom: 12px; }
 
-        .stat-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            font-size: 11px;
-            opacity: 0.9;
-            margin-bottom: 12px;
-        }
-
-        .stat-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .badge {
-            font-size: 9px;
-            padding: 2px 8px;
-            border-radius: 5px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
+        .badge { font-size: 9px; padding: 2px 8px; border-radius: 5px; font-weight: bold; text-transform: uppercase; }
         .badge-online { background: rgba(0, 230, 118, 0.15); color: var(--accent); }
         .badge-offline { background: rgba(248, 81, 73, 0.15); color: #f85149; }
         .badge-accident { background: #f85149; color: white; animation: pulse 0.8s infinite; }
 
         /* 🎮 BUTTONS */
-        .btn-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        button {
-            background: #21262d;
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 9px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        button:hover { background: #30363d; border-color: #8b949e; }
+        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        button { background: #21262d; border: 1px solid var(--border); color: var(--text); padding: 9px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #30363d; }
         button.active-follow { border-color: var(--oliver); color: var(--oliver); }
         button.active-track { border-color: var(--accent); color: var(--accent); }
         button.active-watch { border-color: #ffd84d; color: #ffd84d; }
-        button.active-alarm { background: #f85149 !important; color: white; border-color: #f85149; }
+        button.active-alarm { background: #f85149 !important; color: white; }
 
         /* 🌐 GEOFENCES */
-        .gf-item {
-            font-size: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 8px;
-            margin-bottom: 5px;
-        }
-
+        .gf-item { font-size: 12px; display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; margin-bottom: 5px; }
         .gf-del { color: #f85149; cursor: pointer; font-weight: bold; font-size: 14px; padding: 5px; }
 
         /* 🗺️ MAP */
         #map { flex: 1; }
 
-        /* 🏹 MARKER ICON & ANIMATION */
-        .marker-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        /* 🏹 MARKER ICON (Optimierte Größe) */
+        .marker-container { position: relative; display: flex; align-items: center; justify-content: center; }
+        .marker-arrow { 
+            width: 0; height: 0; border-left: solid transparent; border-right: solid transparent; border-bottom: solid; 
+            filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); transition: transform 0.4s ease;
         }
+        .marker-letter { position: absolute; width: 100%; text-align: center; color: white; font-weight: 900; text-shadow: 0 0 3px black; pointer-events: none; }
 
-        .marker-arrow {
-            width: 0; height: 0;
-            border-left: solid transparent;
-            border-right: solid transparent;
-            border-bottom: solid;
-            filter: drop-shadow(0 0 4px rgba(0,0,0,0.6));
-            transition: transform 0.4s ease, border-bottom-color 0.3s ease;
-        }
-
-        .marker-letter {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-weight: 900;
-            text-shadow: 0 0 3px black;
-            pointer-events: none;
-        }
-
-        /* 🚨 ACCIDENT BLINK */
         .accident-blink { animation: blink-red 0.5s infinite !important; }
         @keyframes blink-red {
             0% { border-bottom-color: #ff0000; transform: scale(1) rotate(var(--rot)); }
             50% { border-bottom-color: #ffffff; transform: scale(1.4) rotate(var(--rot)); }
             100% { border-bottom-color: #ff0000; transform: scale(1) rotate(var(--rot)); }
         }
-
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
@@ -231,10 +81,9 @@
 <div id="login-overlay">
     <div class="login-box">
         <h1 style="color: var(--accent); margin-top: 0;">🛰️ GPS CONTROL</h1>
-        <p style="opacity: 0.7;">Bitte API-Key eingeben</p>
         <input type="password" id="pw_field" placeholder="Passwort..." onkeydown="if(event.key==='Enter') login()">
         <br>
-        <button onclick="login()" style="width:100%; padding:14px; background:var(--accent); color:black; font-size: 14px;">ZUGRIFF ERTEILEN</button>
+        <button onclick="login()" style="width:100%; padding:14px; background:var(--accent); color:black; font-size: 14px;">ENTSPERREN</button>
     </div>
 </div>
 
@@ -244,21 +93,13 @@
             <h2>📡 GERÄTE <span id="count" style="opacity:0.4">0</span></h2>
             <button onclick="toggleFullscreen()" style="width:auto; padding: 6px 12px; background: #30363d; border:none; font-size: 10px;">⛶ FULLSCREEN</button>
         </div>
-        
         <div id="device-list"></div>
-
         <hr style="border:0; border-top:1px solid var(--border); margin: 25px 0;">
-
         <h2>🌐 GEOFENCES</h2>
-        <p style="font-size:11px; opacity:0.5; margin-top:-10px">Klicke auf die Karte für neue Zonen.</p>
         <div id="gf-list"></div>
     </div>
-
-    <div style="padding:15px; background: #0d1117; border-top: 1px solid var(--border); font-size: 11px;">
-        <div style="display:flex; justify-content: space-between;">
-            <span>Server: <b id="srv-url">---</b></span>
-            <span id="status" style="color:red">● Offline</span>
-        </div>
+    <div style="padding:15px; background: #0d1117; border-top: 1px solid var(--border); font-size: 11px; display:flex; justify-content: space-between;">
+        <span>Server: <b id="srv-url">---</b></span><span id="status" style="color:red">● Offline</span>
     </div>
 </div>
 
@@ -267,11 +108,11 @@
 <script>
     const BASE = "https://gps-server-f9b6.onrender.com";
     let API_KEY = sessionStorage.getItem("gps_key");
+    let socket;
 
     const devices = {}, ui = {}, markers = {}, tracks = {}, gfCircles = {};
     let followId = null;
 
-    // MAP INITIALISIERUNG
     const map = L.map("map", { zoomControl: false }).setView([47.09, 15.42], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -279,56 +120,40 @@
     function login() {
         const val = document.getElementById("pw_field").value;
         if (!val) return;
-        API_KEY = val;
-        sessionStorage.setItem("gps_key", val);
-        init();
+        API_KEY = val; sessionStorage.setItem("gps_key", val); init();
     }
 
     async function init() {
         const res = await api("/devices");
-        if (res.status === 401) {
-            alert("Passwort falsch!");
-            sessionStorage.removeItem("gps_key");
-            location.reload();
-            return;
-        }
-
+        if (res.status === 401) { alert("Passwort falsch!"); return; }
+        
         document.getElementById("login-overlay").style.display = "none";
-        document.getElementById("status").innerText = "● Verbunden";
+        document.getElementById("status").innerText = "● Verbunden"; 
         document.getElementById("status").style.color = "var(--accent)";
         document.getElementById("srv-url").innerText = BASE.replace("https://", "");
 
-        const socket = io(BASE, { extraHeaders: { "x-api-key": API_KEY } });
+        socket = io(BASE, { extraHeaders: { "x-api-key": API_KEY } });
         socket.on("location_update", d => {
-            // 🚨 AUTO-ZOOM & FOLLOW BEI UNFALL
-            if (d.accident && (!devices[d.deviceId] || !devices[d.deviceId].accident)) {
-                map.setView([d.lat, d.lon], 18);
-                followId = d.deviceId;
+            if (d.accident && (!devices[d.deviceId] || !devices[d.deviceId].accident)) { 
+                map.setView([d.lat, d.lon], 18); 
+                followId = d.deviceId; 
             }
             updateDevice(d);
         });
-        socket.on("geofences_updated", (list) => drawGeofences(list));
+        socket.on("geofences_updated", list => drawGeofences(list));
 
         const data = await res.json();
         const coords = [];
-        data.forEach(d => {
-            updateDevice(d);
-            if (d.lat && d.lon) coords.push([d.lat, d.lon]);
+        data.forEach(d => { 
+            updateDevice(d); 
+            if (d.lat && d.lon) coords.push([d.lat, d.lon]); 
         });
-
-        // 🔥 AUTO-ZOOM AUF ALLE GERÄTE BEIM START
-        if (coords.length > 0) {
-            map.fitBounds(coords, { padding: [50, 50] });
-        }
-
+        if (coords.length > 0) map.fitBounds(coords, { padding: [50, 50] });
         refreshGF();
     }
 
     async function api(path, opt = {}) {
-        return fetch(BASE + path, {
-            ...opt,
-            headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) }
-        });
+        return fetch(BASE + path, { ...opt, headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) } });
     }
 
     function updateDevice(d) {
@@ -336,12 +161,15 @@
         devices[id] = { ...devices[id], ...d };
         ui[id] = ui[id] || { track: false };
 
+        // 🔥 WICHTIG: Server-Raum für Live-Updates beitreten
+        if (socket) socket.emit("join_device", id);
+
         const color = id.includes("nicole") ? "#e91e63" : "#2196f3";
         const letter = (d.name || id).charAt(0).toUpperCase();
         
-        // 🏹 DYNAMISCHE SKALIERUNG DER MARKER (2/3 GRÖSSE)
+        // 🏹 MARKER-GRÖSSE (Optimiert)
         const zoom = map.getZoom();
-        const baseSize = Math.max(12, zoom * 1.6);
+        const baseSize = Math.max(10, zoom * 1.3); 
         const arrowHeight = baseSize * 1.4;
         const arrowWidth = baseSize * 1.0;
 
@@ -353,27 +181,24 @@
                                 border-left: ${arrowWidth/2}px solid transparent;
                                 border-right: ${arrowWidth/2}px solid transparent;
                                 border-bottom: ${arrowHeight}px solid ${color}"></div>
-                    <div class="marker-letter" style="font-size:${baseSize/1.7}px; top:${baseSize/4}px">${letter}</div>
+                    <div class="marker-letter" style="font-size:${baseSize/1.6}px; top:${baseSize/4}px">${letter}</div>
                    </div>`,
             iconSize: [baseSize, baseSize], iconAnchor: [baseSize/2, baseSize/2]
         });
 
         if (!markers[id]) {
-            markers[id] = L.marker([d.lat, d.lon], { icon: icon }).addTo(map);
-            markers[id].on('click', () => select(id));
+            markers[id] = L.marker([d.lat, d.lon], { icon }).addTo(map).on('click', () => select(id));
         } else {
             markers[id].setLatLng([d.lat, d.lon]);
             markers[id].setIcon(icon);
         }
 
         if (ui[id].track) {
-            if (!tracks[id]) tracks[id] = L.polyline([], { color: color, weight: 4, opacity: 0.5 }).addTo(map);
-            const pts = tracks[id].getLatLngs();
-            pts.push([d.lat, d.lon]);
-            if (pts.length > 500) pts.shift();
+            if (!tracks[id]) tracks[id] = L.polyline([], { color: color, weight: 3, opacity: 0.4 }).addTo(map);
+            const pts = tracks[id].getLatLngs(); pts.push([d.lat, d.lon]);
+            if (pts.length > 400) pts.shift();
             tracks[id].setLatLngs(pts);
         }
-
         if (followId === id) map.panTo([d.lat, d.lon]);
         render();
     }
@@ -389,28 +214,24 @@
             const isOnline = (Date.now() - d.lastSeen < 70000);
             const isLocked = d.isLocked || d.isWifi;
             const timeStr = new Date(d.timestamp).toLocaleTimeString();
-            const speedKmh = (d.speed * 3.6).toFixed(1);
-
+            
             el.innerHTML += `
                 <div class="device-card ${followId === id ? 'active' : ''}" onclick="select('${id}')">
                     <div class="name-row">
                         <span>${d.name || id}</span>
                         <div>
                             ${d.accident ? '<span class="badge badge-accident">🚨 UNFALL</span>' : ''}
-                            <span class="badge ${isOnline ? 'badge-online' : 'badge-offline'}">${isOnline ? 'Online' : 'Offline'}</span>
+                            <span class="badge" style="color:${isOnline?'var(--accent)':'#f85149'}">${isOnline?'Online':'Offline'}</span>
                         </div>
                     </div>
                     <div class="stat-grid">
-                        <div class="stat-item">📍 ${d.lat.toFixed(6)}, ${d.lon.toFixed(6)}</div>
-                        <div class="stat-item">🔋 ${d.battery || '--'}%</div>
-                        <div class="stat-item">💨 ${speedKmh} km/h</div>
-                        <div class="stat-item">🎯 +/- ${Math.round(d.accuracy || 0)}m</div>
-                        ${d.temperature ? `<div class="stat-item">🌡️ ${d.temperature.toFixed(1)}°C</div>` : ''}
-                        <div class="stat-item">🧭 ${Math.round(d.bearing || 0)}°</div>
+                        <div>📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}</div>
+                        <div>🔋 ${d.battery || '--'}% | 💨 ${(d.speed*3.6).toFixed(1)} km/h</div>
+                        <div>🎯 +/- ${Math.round(d.accuracy||0)}m | 🧭 ${Math.round(d.bearing||0)}°</div>
+                        ${d.temperature ? `<div>🌡️ ${d.temperature.toFixed(1)}°C</div>` : ''}
                     </div>
                     <div style="font-size:10px; opacity:0.6; margin-bottom:12px; line-height:1.5">
                         ${isLocked ? '🔒 GPS LOKAL FIXIERT' : (d.isMotion ? '🏃 IN BEWEGUNG' : '🛑 STEHEND')} | ${timeStr}<br>
-                        ${d.geofenceEvent ? '🔔 EVENT: ' + d.geofenceEvent.toUpperCase() + '<br>' : ''}
                         ${d.isWatched ? '⚠️ BEOBACHTET VON ' + (d.watcherName || 'Unbekannt') : 'Bereit'}
                     </div>
                     <div class="btn-row">
@@ -425,8 +246,7 @@
 
     function drawGeofences(list) {
         Object.values(gfCircles).forEach(c => map.removeLayer(c));
-        const listEl = document.getElementById("gf-list");
-        listEl.innerHTML = "";
+        const listEl = document.getElementById("gf-list"); listEl.innerHTML = "";
         list.forEach(gf => {
             gfCircles[gf.id] = L.circle([gf.lat, gf.lon], { radius: gf.radius, color: '#00e676', weight: 1, fillOpacity: 0.1 }).addTo(map);
             listEl.innerHTML += `<div class="gf-item"><span>📍 ${gf.name} (${Math.round(gf.radius)}m)</span><span class="gf-del" onclick="delGF('${gf.id}')">✕</span></div>`;
@@ -434,8 +254,7 @@
     }
 
     map.on('zoomend', () => Object.values(devices).forEach(updateDevice));
-
-    map.on('click', async (e) => {
+    map.on('click', async e => {
         const name = prompt("Name der neuen Zone?"); if (!name) return;
         const rad = prompt("Radius (m)?", "100"); if (!rad) return;
         await api("/geofences", { method: "POST", body: JSON.stringify({ name, lat: e.latlng.lat, lon: e.latlng.lng, radius: parseInt(rad) }) });
@@ -445,10 +264,15 @@
     function select(id) { followId = id; map.panTo([devices[id].lat, devices[id].lon]); render(); }
     function toggleFollow(id) { followId = (followId === id) ? null : id; render(); }
     function toggleTrack(id) { ui[id].track = !ui[id].track; if(!ui[id].track && tracks[id]) { map.removeLayer(tracks[id]); delete tracks[id]; } render(); }
-    async function toggleWatch(id) { const d = devices[id]; const action = d.isWatched ? 'unwatch' : 'watch'; await api(`/devices/${id}/${action}?watcherId=web_center&watcherName=Web-Center`, { method: "POST" }); d.isWatched = !d.isWatched; render(); }
-    async function toggleAlarm(id) { const act = !devices[id].alarmActive; await api(`/devices/${id}/alarm?active=${act}`, { method: "POST" }); devices[id].alarmActive = act; render(); }
-    async function delGF(id) { if(confirm("Zone löschen?")) await api(`/geofences/${id}`, { method: "DELETE" }); refreshGF(); }
-    async function refreshGF() { const r = await api("/geofences"); drawGeofences(await r.json()); }
+    async function toggleWatch(id) { 
+        const d=devices[id]; const action=d.isWatched?'unwatch':'watch'; 
+        const myName = "Web-Center"; // Name für die Anzeige auf dem Handy
+        await api(`/devices/${id}/${action}?watcherId=web_center&watcherName=${myName}`, {method:"POST"}); 
+        d.isWatched=!d.isWatched; render(); 
+    }
+    async function toggleAlarm(id) { const act=!devices[id].alarmActive; await api(`/devices/${id}/alarm?active=${act}`, {method:"POST"}); devices[id].alarmActive=act; render(); }
+    async function delGF(id) { if(confirm("Löschen?")) await api(`/geofences/${id}`, {method:"DELETE"}); refreshGF(); }
+    async function refreshGF() { const r=await api("/geofences"); drawGF(await r.json()); }
     function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
 
     if (API_KEY) init();
