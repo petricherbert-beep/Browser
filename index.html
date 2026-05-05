@@ -115,7 +115,8 @@ button:hover{
 <script>
 
 const SERVER = "https://gps-server-f9b6.onrender.com";
-
+const API_KEY = "LaLuna170284?";
+  
 const devices = {};
 const ui = {};
 const markers = {};
@@ -124,14 +125,24 @@ let followId = null;
 
 /* MAP */
 const map = L.map("map").setView([47.09,15.42],13);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  maxZoom:19
-}).addTo(map);
-
 /* SOCKET */
 const socket = io(SERVER);
 socket.on("location_update", update);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19
+  
+}).addTo(map);
+function apiFetch(url, options = {}) {
+  return fetch(`${SERVER}${url}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": API_KEY,
+      ...(options.headers || {})
+    }
+  });
+}
 
 /* ICON */
 function icon(name){
