@@ -12,11 +12,11 @@
 
     <style>
         :root {
-            --accent: #00e676;
-            --nicole: #e91e63;
+            --accent: #00e676; 
+            --nicole: #e91e63; 
             --oliver: #2196f3;
-            --bg-dark: #0d1117;
-            --panel-bg: #161b22;
+            --bg-dark: #0d1117; 
+            --panel-bg: #161b22; 
             --border: #30363d;
             --text: #c9d1d9;
         }
@@ -81,13 +81,17 @@
             padding: 20px;
         }
 
-        h2 {
-            color: var(--accent);
-            font-size: 18px;
-            margin: 0 0 15px 0;
+        .header-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            color: var(--accent);
+            font-size: 18px;
+            margin: 0;
             letter-spacing: 1px;
         }
 
@@ -133,8 +137,7 @@
 
         .badge-online { background: rgba(0, 230, 118, 0.15); color: var(--accent); }
         .badge-offline { background: rgba(248, 81, 73, 0.15); color: #f85149; }
-        .badge-locked { background: rgba(33, 150, 243, 0.15); color: #2196f3; }
-        .badge-accident { background: #f85149; color: white; animation: pulse 1s infinite; }
+        .badge-accident { background: #f85149; color: white; animation: pulse 0.8s infinite; }
 
         /* 🎮 BUTTONS */
         .btn-row {
@@ -159,7 +162,7 @@
         button.active-follow { border-color: var(--oliver); color: var(--oliver); }
         button.active-track { border-color: var(--accent); color: var(--accent); }
         button.active-watch { border-color: #ffd84d; color: #ffd84d; }
-        button.active-alarm { background: #f85149; color: white; border-color: #f85149; }
+        button.active-alarm { background: #f85149 !important; color: white; border-color: #f85149; }
 
         /* 🌐 GEOFENCES */
         .gf-item {
@@ -178,11 +181,9 @@
         /* 🗺️ MAP */
         #map { flex: 1; }
 
-        /* 🏹 MARKER ICON */
+        /* 🏹 MARKER ICON & ANIMATION */
         .marker-container {
             position: relative;
-            width: 40px;
-            height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -190,23 +191,29 @@
 
         .marker-arrow {
             width: 0; height: 0;
-            border-left: 15px solid transparent;
-            border-right: 15px solid transparent;
-            border-bottom: 38px solid var(--oliver);
+            border-left: solid transparent;
+            border-right: solid transparent;
+            border-bottom: solid;
             filter: drop-shadow(0 0 4px rgba(0,0,0,0.6));
-            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .marker-letter {
             position: absolute;
-            top: 15px;
             width: 100%;
             text-align: center;
             color: white;
             font-weight: 900;
-            font-size: 16px;
             text-shadow: 0 0 3px black;
             pointer-events: none;
+        }
+
+        /* 🚨 ACCIDENT BLINK */
+        .accident-blink { animation: blink-red 0.5s infinite !important; }
+        @keyframes blink-red {
+            0% { border-bottom-color: #ff0000; filter: drop-shadow(0 0 15px red); transform: scale(1) rotate(var(--rot)); }
+            50% { border-bottom-color: #ffffff; filter: drop-shadow(0 0 5px white); transform: scale(1.4) rotate(var(--rot)); }
+            100% { border-bottom-color: #ff0000; filter: drop-shadow(0 0 15px red); transform: scale(1) rotate(var(--rot)); }
         }
 
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
@@ -227,7 +234,11 @@
 
 <div id="sidebar">
     <div class="scroll-area">
-        <h2>📡 GERÄTE <span id="count" style="opacity:0.4">0</span></h2>
+        <div class="header-row">
+            <h2>📡 GERÄTE <span id="count" style="opacity:0.4">0</span></h2>
+            <button onclick="toggleFullscreen()" style="width:auto; padding: 6px 12px; background: #30363d; border:none; font-size: 10px;">⛶ FULLSCREEN</button>
+        </div>
+        
         <div id="device-list"></div>
 
         <hr style="border:0; border-top:1px solid var(--border); margin: 25px 0;">
@@ -282,7 +293,14 @@
         document.getElementById("srv-url").innerText = BASE.replace("https://", "");
 
         const socket = io(BASE, { extraHeaders: { "x-api-key": API_KEY } });
-        socket.on("location_update", updateDevice);
+        socket.on("location_update", d => {
+            // 🚨 AUTO-ZOOM & FOLLOW BEI UNFALL
+            if (d.accident && (!devices[d.deviceId] || !devices[d.deviceId].accident)) {
+                map.setView([d.lat, d.lon], 18);
+                followId = d.deviceId;
+            }
+            updateDevice(d);
+        });
         socket.on("geofences_updated", (list) => drawGeofences(list));
 
         const data = await res.json();
@@ -304,14 +322,24 @@
 
         const color = id.includes("nicole") ? "#e91e63" : "#2196f3";
         const letter = (d.name || id).charAt(0).toUpperCase();
+        
+        // 🏹 DYNAMISCHE SKALIERUNG DER MARKER
+        const zoom = map.getZoom();
+        const baseSize = Math.max(14, zoom * 2.5);
+        const arrowHeight = baseSize * 1.4;
+        const arrowWidth = baseSize * 1.0;
 
         const icon = L.divIcon({
             className: 'custom-marker',
-            html: `<div class="marker-container">
-                    <div class="marker-arrow" style="transform: rotate(${d.bearing || 0}deg); border-bottom-color: ${color}"></div>
-                    <div class="marker-letter">${letter}</div>
+            html: `<div class="marker-container" style="width:${baseSize}px; height:${baseSize}px">
+                    <div class="marker-arrow ${d.accident ? 'accident-blink' : ''}" 
+                         style="--rot:${d.bearing || 0}deg; transform: rotate(${d.bearing || 0}deg); 
+                                border-left: ${arrowWidth/2}px solid transparent;
+                                border-right: ${arrowWidth/2}px solid transparent;
+                                border-bottom: ${arrowHeight}px solid ${color}"></div>
+                    <div class="marker-letter" style="font-size:${baseSize/1.8}px; top:${baseSize/4}px">${letter}</div>
                    </div>`,
-            iconSize: [40, 40], iconAnchor: [20, 20]
+            iconSize: [baseSize, baseSize], iconAnchor: [baseSize/2, baseSize/2]
         });
 
         if (!markers[id]) {
@@ -351,7 +379,7 @@
                     <div class="name-row">
                         <span>${d.name || id}</span>
                         <div>
-                            ${d.accident ? '<span class="badge badge-accident">UNFALL</span>' : ''}
+                            ${d.accident ? '<span class="badge badge-accident">🚨 UNFALL</span>' : ''}
                             <span class="badge ${isOnline ? 'badge-online' : 'badge-offline'}">${isOnline ? 'Online' : 'Offline'}</span>
                         </div>
                     </div>
@@ -363,7 +391,7 @@
                     </div>
                     <div style="font-size:10px; opacity:0.6; margin-bottom:12px; line-height:1.4">
                         ${isLocked ? '🔒 GPS LOKAL FIXIERT' : '📡 LIVE GPS'} | ${timeStr}<br>
-                        ${d.isWatched ? '⚠️ BEOBACHTET VON ' + (d.watcherName || 'Jemand') : 'Aktuell nicht beobachtet'}
+                        ${d.isWatched ? '⚠️ BEOBACHTET VON ' + (d.watcherName || 'Unbekannt') : 'Bereit'}
                     </div>
                     <div class="btn-row">
                         <button class="${followId === id ? 'active-follow' : ''}" onclick="event.stopPropagation(); toggleFollow('${id}')">FOLLOW</button>
@@ -385,6 +413,9 @@
         });
     }
 
+    // Event: Marker beim Zoomen skalieren
+    map.on('zoomend', () => Object.values(devices).forEach(updateDevice));
+
     map.on('click', async (e) => {
         const name = prompt("Name der neuen Zone?"); if (!name) return;
         const rad = prompt("Radius (m)?", "100"); if (!rad) return;
@@ -399,6 +430,7 @@
     async function toggleAlarm(id) { const act = !devices[id].alarmActive; await api(`/devices/${id}/alarm?active=${act}`, { method: "POST" }); devices[id].alarmActive = act; render(); }
     async function delGF(id) { if(confirm("Zone löschen?")) await api(`/geofences/${id}`, { method: "DELETE" }); refreshGF(); }
     async function refreshGF() { const r = await api("/geofences"); drawGeofences(await r.json()); }
+    function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
 
     if (API_KEY) init();
 </script>
