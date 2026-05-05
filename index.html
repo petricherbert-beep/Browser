@@ -21,15 +21,14 @@ body{
 
 /* PANEL */
 #panel{
-  width:380px;
+  width:360px;
   margin:1cm;
   overflow:auto;
-  background:rgba(10,15,25,0.55);
+  background:rgba(10,15,25,0.6);
   padding:14px;
   border-radius:18px;
   border:1px solid rgba(0,255,200,0.15);
-  box-shadow:0 0 50px rgba(0,255,200,0.25);
-  backdrop-filter: blur(12px);
+  box-shadow:0 0 40px rgba(0,255,200,0.2);
 }
 
 /* MAP */
@@ -38,14 +37,14 @@ body{
   margin:1cm;
   border-radius:20px;
   overflow:hidden;
-  box-shadow:0 0 80px rgba(0,255,200,0.25);
+  box-shadow:0 0 60px rgba(0,255,200,0.25);
 }
 
 /* DEVICE */
 .device{
   padding:10px;
   margin-bottom:10px;
-  border:1px solid rgba(0,255,200,0.15);
+  border:1px solid rgba(0,255,200,0.1);
   border-radius:12px;
   background:rgba(255,255,255,0.03);
 }
@@ -56,41 +55,28 @@ button{
   padding:6px 10px;
   font-size:12px;
   border-radius:10px;
-  border:1px solid rgba(0,255,200,0.15);
+  border:1px solid rgba(0,255,200,0.2);
   background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
-  transition:0.2s;
 }
 
 button:hover{
-  box-shadow:0 0 12px rgba(0,255,200,0.35);
+  box-shadow:0 0 10px rgba(0,255,200,0.4);
 }
 
-/* GLOW */
-.glow-btn{
-  width:100%;
-  font-weight:700;
-  border:1px solid rgba(0,255,200,0.35);
-  box-shadow:0 0 12px rgba(0,255,200,0.35);
-}
-
-.glow-btn:hover{
-  box-shadow:0 0 20px rgba(0,255,200,0.7);
-}
-
-/* STATES */
-.active-follow{ color:#3aa0ff; border-color:#3aa0ff; }
-.active-track{ color:#00ffb3; border-color:#00ffb3; }
-.active-watch{ color:#ffd84d; border-color:#ffd84d; }
-.active-alarm{ color:#ff4d4d; border-color:#ff4d4d; }
+/* ACTIVE */
+.active-follow{color:#3aa0ff;border-color:#3aa0ff;}
+.active-track{color:#00ffb3;border-color:#00ffb3;}
+.active-watch{color:#ffd84d;border-color:#ffd84d;}
+.active-alarm{color:#ff4d4d;border-color:#ff4d4d;}
 </style>
 </head>
 
 <body>
 
 <div id="panel">
-  <button class="glow-btn" onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
+  <button onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
   <hr>
   <div id="list"></div>
 </div>
@@ -99,18 +85,30 @@ button:hover{
 
 <script>
 
-const SERVER = "https://gps-server-f9b6.onrender.com";
-const API_KEY = "LaLuna170284?";
+// 🔑 API KEY
+const API_KEY = "LaLuna170284?;
 
+// 🌐 SERVER
+const BASE = "https://gps-server-f9b6.onrender.com";
+
+// STATE
 const devices = {};
 const ui = {};
 const markers = {};
 const tracks = {};
 let followId = null;
 
-/* SAFE FETCH (WICHTIG) */
+// MAP
+const map = L.map("map").setView([47.09,15.42],13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+// SOCKET
+const socket = io(BASE);
+socket.on("location_update", update);
+
+// API HELPER
 async function apiFetch(url, options = {}) {
-  const res = await fetch(`${SERVER}${url}`, {
+  const res = await fetch(BASE + url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -119,159 +117,118 @@ async function apiFetch(url, options = {}) {
     }
   });
 
-  const text = await res.text();
-
   if (!res.ok) {
+    const text = await res.text();
     console.error("SERVER ERROR:", res.status, text);
-    return [];
   }
 
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    console.error("INVALID JSON:", text);
-    return [];
-  }
+  return res;
 }
 
-/* MAP */
-const map = L.map("map").setView([47.09,15.42],13);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  maxZoom:19
-}).addTo(map);
-
-/* SOCKET */
-const socket = io(SERVER);
-socket.on("location_update", update);
-
-/* ICON */
-function icon(name){
-  const n = (name||"").toLowerCase();
-  let c = "#00ffb3";
-  let l = (name?.[0]||"?").toUpperCase();
-
-  if(n.includes("nicole")) { c="#ff3b3b"; l="N"; }
-  if(n.includes("oliver")) { c="#3aa0ff"; l="O"; }
-
-  return L.divIcon({
-    className:"",
-    iconSize:[40,40],
-    iconAnchor:[20,20],
-    html:`
-      <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
-        <div style="position:absolute;font-size:34px;color:${c};">▲</div>
-        <div style="position:absolute;font-size:13px;color:#fff;">${l}</div>
-      </div>`
-  });
-}
-
-/* UPDATE */
+// UPDATE
 function update(d){
-  if(!d.deviceId) return;
+  const id=d.deviceId;
+  if(!d.lat || !d.lon) return;
 
-  const id = d.deviceId;
-  devices[id] = {...devices[id],...d};
-  ui[id] = ui[id] || {follow:false,track:false,watch:false};
+  devices[id]={...devices[id],...d};
+  ui[id]=ui[id]||{follow:false,track:false,watch:false};
 
   if(!markers[id]){
-    markers[id] = L.marker([d.lat,d.lon],{icon:icon(d.name)}).addTo(map);
-  } else {
-    markers[id].setLatLng([d.lat,d.lon]);
+    markers[id]=L.marker([d.lat,d.lon]).addTo(map);
   }
+
+  markers[id].setLatLng([d.lat,d.lon]);
 
   if(ui[id].track){
     if(!tracks[id]){
-      tracks[id] = L.polyline([],{
-        color:"#00ffb3",
-        weight:3
-      }).addTo(map);
+      tracks[id]=L.polyline([],{color:"#00ffb3"}).addTo(map);
     }
-    const pts = tracks[id].getLatLngs();
+    const pts=tracks[id].getLatLngs();
     pts.push([d.lat,d.lon]);
-    tracks[id].setLatLngs(pts.slice(-200));
+    if(pts.length>200) pts.shift();
+    tracks[id].setLatLngs(pts);
   }
 
-  if(followId === id){
+  if(followId===id){
     map.panTo([d.lat,d.lon]);
   }
 
   render();
 }
 
-/* UI */
+// UI
 function render(){
-  const el = document.getElementById("list");
-  el.innerHTML = "";
+  const el=document.getElementById("list");
+  el.innerHTML="";
 
   Object.entries(devices).forEach(([id,d])=>{
-    const u = ui[id];
-    const online = Date.now() - (d.lastSeen||0) < 30000;
+    const u=ui[id];
 
-    el.innerHTML += `
-      <div class="device">
-        <b>${d.name||id}</b><br><br>
-        📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
-        ⚡ ${d.speed||0} km/h<br>
-        🔋 ${d.battery||"-"}%<br>
-        📡 ${online?"ONLINE":"OFFLINE"}<br>
+    el.innerHTML+=`
+    <div class="device">
+      <b>${d.name||id}</b><br>
+      📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
+      ⚡ ${d.speed||0} km/h<br>
+      🔋 ${d.battery||"-"}%<br>
+      📡 ${(Date.now()-d.lastSeen<60000)?"🟢":"🔴"}<br>
 
-        <hr>
+      <hr>
 
-        <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
-        <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
-        <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
-        <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
-      </div>
+      <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
+      <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
+      <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
+      <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
+    </div>
     `;
   });
 }
 
-/* ACTIONS */
+// ACTIONS
 function follow(id){
-  ui[id].follow = !ui[id].follow;
-  followId = ui[id].follow ? id : null;
+  ui[id].follow=!ui[id].follow;
+  followId=ui[id].follow?id:null;
   render();
 }
 
 function track(id){
-  ui[id].track = !ui[id].track;
-  if(!ui[id].track && tracks[id]) tracks[id].setLatLngs([]);
+  ui[id].track=!ui[id].track;
   render();
 }
 
-function watch(id){
-  ui[id].watch = !ui[id].watch;
-  apiFetch(`/devices/${id}/watch`,{
+async function watch(id){
+  const newState=!ui[id].watch;
+  ui[id].watch=newState;
+  render();
+
+  await apiFetch(`/devices/${id}/watch`,{
     method:"POST",
-    body: JSON.stringify({watch:ui[id].watch})
+    body:JSON.stringify({watch:newState})
   });
-  render();
 }
 
-function alarm(id){
-  const state = !devices[id].alarmActive;
-  devices[id].alarmActive = state;
+async function alarm(id){
+  const state=!devices[id].alarmActive;
+  devices[id].alarmActive=state;
+  render();
 
-  apiFetch(`/devices/${id}/alarm?active=${state}`,{
+  await apiFetch(`/devices/${id}/alarm?active=${state}`,{
     method:"POST"
   });
-
-  render();
 }
 
-/* FULLSCREEN */
+// FULLSCREEN
 function toggleFullscreen(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
-  } else {
+  }else{
     document.exitFullscreen();
   }
 }
 
-/* INIT */
+// INIT LOAD
 apiFetch("/devices")
-  .then(data => data.forEach(update));
+.then(r=>r.json())
+.then(arr=>arr.forEach(update));
 
 </script>
 
