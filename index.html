@@ -2,235 +2,170 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Control Center</title>
+<title>🛰️ GPS Control Center PRO</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
 <style>
-body{
-  margin:0;
-  font-family:system-ui;
-  background:#05070b;
-  color:#c9d1d9;
-  height:100vh;
-  display:flex;
-  overflow:hidden;
-}
+:root { --accent: #00ffb3; --bg-dark: #05070b; }
+body { margin:0; font-family: system-ui; background: var(--bg-dark); color: #c9d1d9; height: 100vh; display: flex; overflow: hidden; }
 
-/* PANEL */
-#panel{
-  width:360px;
-  margin:1cm;
-  overflow:auto;
-  background:rgba(10,15,25,0.6);
-  padding:14px;
-  border-radius:18px;
-  border:1px solid rgba(0,255,200,0.15);
-  box-shadow:0 0 40px rgba(0,255,200,0.2);
+/* LOGIN OVERLAY */
+#login-overlay {
+  position: fixed; inset: 0; background: var(--bg-dark); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
 }
+.login-box { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 20px; border: 1px solid var(--accent); text-align: center; }
+input[type="password"] { background: #162431; border: 1px solid var(--accent); color: white; padding: 10px; border-radius: 8px; margin: 10px 0; outline: none; }
 
-/* MAP */
-#map{
-  flex:1;
-  margin:1cm;
-  border-radius:20px;
-  overflow:hidden;
-  box-shadow:0 0 60px rgba(0,255,200,0.25);
-}
-
-/* DEVICE */
-.device{
-  padding:10px;
-  margin-bottom:10px;
-  border:1px solid rgba(0,255,200,0.1);
-  border-radius:12px;
-  background:rgba(255,255,255,0.03);
-}
-
-/* BUTTONS */
-button{
-  margin:3px;
-  padding:6px 10px;
-  font-size:12px;
-  border-radius:10px;
-  border:1px solid rgba(0,255,200,0.2);
-  background:#0a141f;
-  color:#c9d1d9;
-  cursor:pointer;
-}
-
-button:hover{
-  box-shadow:0 0 10px rgba(0,255,200,0.4);
-}
-
-/* ACTIVE */
-.active-follow{color:#3aa0ff;border-color:#3aa0ff;}
-.active-track{color:#00ffb3;border-color:#00ffb3;}
-.active-watch{color:#ffd84d;border-color:#ffd84d;}
-.active-alarm{color:#ff4d4d;border-color:#ff4d4d;}
+/* UI */
+#panel { width: 380px; margin: 20px; overflow: auto; background: rgba(10,15,25,0.85); padding: 20px; border-radius: 18px; border: 1px solid rgba(0,255,200,0.15); backdrop-filter: blur(10px); z-index: 1000; }
+#map { flex: 1; margin: 20px 20px 20px 0; border-radius: 20px; overflow: hidden; background: #111; }
+.device { padding: 15px; margin-bottom: 12px; border: 1px solid rgba(0,255,200,0.1); border-radius: 14px; background: rgba(255,255,255,0.02); }
+.status-pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: bold; }
+.online { background: rgba(0, 255, 179, 0.2); color: #00ffb3; }
+.offline { background: rgba(255, 77, 77, 0.2); color: #ff4d4d; }
+.btn-group { display: flex; gap: 5px; margin-top: 10px; }
+button { flex: 1; padding: 8px 5px; font-size: 11px; font-weight: bold; border-radius: 8px; border: 1px solid rgba(0,255,200,0.2); background: #0a141f; color: #c9d1d9; cursor: pointer; }
+button:hover { background: #162431; }
+.active-follow { background: #3aa0ff !important; }
+.active-track { background: var(--accent) !important; color: #05070b; }
+.arrow-icon { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 25px solid var(--accent); }
 </style>
 </head>
 
 <body>
 
+<!-- Passwort Abfrage -->
+<div id="login-overlay">
+  <div class="login-box">
+    <h2 style="color: var(--accent)">🔑 Restricted Access</h2>
+    <p>Bitte API-Key eingeben:</p>
+    <input type="password" id="api-input" placeholder="Passwort...">
+    <br>
+    <button onclick="attemptLogin()" style="width: 100%; margin-top: 10px;">LOGIN</button>
+  </div>
+</div>
+
 <div id="panel">
-  <button onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
-  <hr>
+  <h2 style="margin:0; color: var(--accent)">🛰️ ADMIN CENTER</h2>
+  <p id="stats" style="font-size: 11px; opacity: 0.6;">Nicht angemeldet</p>
+  <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0;">
   <div id="list"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
-
-// 🔑 API KEY
-const API_KEY = "LaLuna170284?";
-
-// 🌐 SERVER
 const BASE = "https://gps-server-f9b6.onrender.com";
+let API_KEY = sessionStorage.getItem("gps_admin_key");
 
-// STATE
-const devices = {};
-const ui = {};
-const markers = {};
-const tracks = {};
+const devices = {}, ui = {}, markers = {}, tracks = {}, gfLayers = {};
 let followId = null;
 
 // MAP
-const map = L.map("map").setView([47.09,15.42],13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+const map = L.map("map", { zoomControl: false }).setView([47.09, 15.42], 13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-// SOCKET
-const socket = io(BASE);
-socket.on("location_update", update);
-
-// API HELPER
-async function apiFetch(url, options = {}) {
-  const res = await fetch(BASE + url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY,
-      ...(options.headers || {})
-    }
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("SERVER ERROR:", res.status, text);
-  }
-
-  return res;
+function attemptLogin() {
+  const input = document.getElementById("api-input").value;
+  if(!input) return;
+  API_KEY = input;
+  sessionStorage.setItem("gps_admin_key", input);
+  initApp();
 }
 
-// UPDATE
-function update(d){
-  const id=d.deviceId;
-  if(!d.lat || !d.lon) return;
-
-  devices[id]={...devices[id],...d};
-  ui[id]=ui[id]||{follow:false,track:false,watch:false};
-
-  if(!markers[id]){
-    markers[id]=L.marker([d.lat,d.lon]).addTo(map);
+async function initApp() {
+  const res = await apiFetch("/devices");
+  if (res.status === 401) {
+    alert("Falscher API-Key!");
+    sessionStorage.removeItem("gps_admin_key");
+    location.reload();
+    return;
   }
+  
+  document.getElementById("login-overlay").style.display = "none";
+  document.getElementById("stats").innerText = "📡 Verbunden: " + BASE;
 
-  markers[id].setLatLng([d.lat,d.lon]);
+  const socket = io(BASE, { extraHeaders: { "x-api-key": API_KEY } });
+  socket.on("location_update", updateDevice);
+  socket.on("geofences_updated", drawGeofences);
+  
+  const initialData = await res.json();
+  initialData.forEach(updateDevice);
+  
+  const gfRes = await apiFetch("/geofences");
+  drawGeofences(await gfRes.json());
+}
 
-  if(ui[id].track){
-    if(!tracks[id]){
-      tracks[id]=L.polyline([],{color:"#00ffb3"}).addTo(map);
-    }
-    const pts=tracks[id].getLatLngs();
-    pts.push([d.lat,d.lon]);
-    if(pts.length>200) pts.shift();
+async function apiFetch(url, options = {}) {
+  return fetch(BASE + url, {
+    ...options,
+    headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(options.headers || {}) }
+  });
+}
+
+function updateDevice(d) {
+  const id = d.deviceId;
+  if (!d.lat || !d.lon) return;
+  devices[id] = { ...devices[id], ...d };
+  ui[id] = ui[id] || { follow: false, track: false };
+
+  const icon = L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div class="arrow-icon" style="transform: rotate(${d.bearing || 0}deg); border-bottom-color: ${id.includes('nicole') ? '#ff2d55' : '#00ffb3'}"></div>`,
+    iconSize: [20, 25], iconAnchor: [10, 12]
+  });
+
+  if (!markers[id]) markers[id] = L.marker([d.lat, d.lon], { icon: icon }).addTo(map);
+  else { markers[id].setLatLng([d.lat, d.lon]); markers[id].setIcon(icon); }
+
+  if (ui[id].track) {
+    if (!tracks[id]) tracks[id] = L.polyline([], { color: id.includes('nicole') ? '#ff2d55' : '#00ffb3', weight: 3 }).addTo(map);
+    const pts = tracks[id].getLatLngs(); pts.push([d.lat, d.lon]);
+    if (pts.length > 500) pts.shift();
     tracks[id].setLatLngs(pts);
   }
-
-  if(followId===id){
-    map.panTo([d.lat,d.lon]);
-  }
-
-  render();
+  if (followId === id) map.panTo([d.lat, d.lon]);
+  renderList();
 }
 
-// UI
-function render(){
-  const el=document.getElementById("list");
-  el.innerHTML="";
-
-  Object.entries(devices).forEach(([id,d])=>{
-    const u=ui[id];
-
-    el.innerHTML+=`
-    <div class="device">
-      <b>${d.name||id}</b><br>
-      📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
-      ⚡ ${d.speed||0} km/h<br>
-      🔋 ${d.battery||"-"}%<br>
-      📡 ${(Date.now()-d.lastSeen<60000)?"🟢":"🔴"}<br>
-
-      <hr>
-
-      <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
-      <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
-      <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
-      <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
-    </div>
-    `;
+function drawGeofences(list) {
+  Object.values(gfLayers).forEach(l => map.removeLayer(l));
+  list.forEach(gf => {
+    gfLayers[gf.id] = L.circle([gf.lat, gf.lon], { radius: gf.radius || 100, color: '#3aa0ff', fillOpacity: 0.1 }).addTo(map);
   });
 }
 
-// ACTIONS
-function follow(id){
-  ui[id].follow=!ui[id].follow;
-  followId=ui[id].follow?id:null;
-  render();
-}
-
-function track(id){
-  ui[id].track=!ui[id].track;
-  render();
-}
-
-async function watch(id){
-  const newState=!ui[id].watch;
-  ui[id].watch=newState;
-  render();
-
-  await apiFetch(`/devices/${id}/watch`,{
-    method:"POST",
-    body:JSON.stringify({watch:newState})
+function renderList() {
+  const el = document.getElementById("list");
+  el.innerHTML = "";
+  Object.values(devices).sort((a,b) => b.lastSeen - a.lastSeen).forEach(d => {
+    const isOnline = (Date.now() - d.lastSeen < 70000);
+    el.innerHTML += `
+      <div class="device">
+        <div style="display:flex; justify-content:space-between;">
+          <b>${d.name || d.deviceId}</b>
+          <span class="status-pill ${isOnline?'online':'offline'}">${isOnline?'ONLINE':'OFFLINE'}</span>
+        </div>
+        <div style="font-size: 11px; opacity: 0.7; margin-top:5px">🔋 ${d.battery||'--'}% | 💨 ${(d.speed*3.6).toFixed(1)} km/h</div>
+        <div class="btn-group">
+          <button class="${followId===d.deviceId?'active-follow':''}" onclick="toggleFollow('${d.deviceId}')">FOLLOW</button>
+          <button class="${ui[d.deviceId].track?'active-track':''}" onclick="toggleTrack('${d.deviceId}')">TRACK</button>
+          <button onclick="toggleAlarm('${d.deviceId}', ${!d.alarmActive})">${d.alarmActive?'STOP':'ALARM'}</button>
+        </div>
+      </div>`;
   });
 }
 
-async function alarm(id){
-  const state=!devices[id].alarmActive;
-  devices[id].alarmActive=state;
-  render();
+function toggleFollow(id) { followId = (followId === id) ? null : id; renderList(); }
+function toggleTrack(id) { ui[id].track = !ui[id].track; renderList(); }
+async function toggleAlarm(id, active) { await apiFetch(`/devices/${id}/alarm?active=${active}`, { method: "POST" }); }
 
-  await apiFetch(`/devices/${id}/alarm?active=${state}`,{
-    method:"POST"
-  });
-}
-
-// FULLSCREEN
-function toggleFullscreen(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen();
-  }else{
-    document.exitFullscreen();
-  }
-}
-
-// INIT LOAD
-apiFetch("/devices")
-.then(r=>r.json())
-.then(arr=>arr.forEach(update));
-
+// Auto-Login if key exists
+if (API_KEY) initApp();
 </script>
-
 </body>
 </html>
