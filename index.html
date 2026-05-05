@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Control Center neu</title>
+<title>GPS Control Center</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -39,7 +39,6 @@ body{
   border-radius:20px;
   overflow:hidden;
   box-shadow:0 0 80px rgba(0,255,200,0.25);
-  filter:brightness(0.85) contrast(1.15);
 }
 
 /* DEVICE */
@@ -49,17 +48,6 @@ body{
   border:1px solid rgba(0,255,200,0.15);
   border-radius:12px;
   background:rgba(255,255,255,0.03);
-  transition:0.2s;
-}
-
-.device:hover{
-  box-shadow:0 0 20px rgba(0,255,200,0.15);
-}
-
-.info{
-  font-size:12px;
-  opacity:0.9;
-  line-height:1.4;
 }
 
 /* BUTTONS */
@@ -76,13 +64,11 @@ button{
 }
 
 button:hover{
-  transform:translateY(-1px);
   box-shadow:0 0 12px rgba(0,255,200,0.35);
 }
 
-/* FULLSCREEN */
+/* GLOW */
 .glow-btn{
-  margin-bottom:10px;
   width:100%;
   font-weight:700;
   border:1px solid rgba(0,255,200,0.35);
@@ -90,15 +76,14 @@ button:hover{
 }
 
 .glow-btn:hover{
-  box-shadow:0 0 20px rgba(0,255,200,0.7),
-             0 0 50px rgba(0,255,200,0.3);
+  box-shadow:0 0 20px rgba(0,255,200,0.7);
 }
 
-/* ACTIVE STATES */
-.active-follow{ color:#3aa0ff; border-color:#3aa0ff; box-shadow:0 0 10px #3aa0ff; }
-.active-track{ color:#00ffb3; border-color:#00ffb3; box-shadow:0 0 10px #00ffb3; }
-.active-watch{ color:#ffd84d; border-color:#ffd84d; box-shadow:0 0 10px #ffd84d; }
-.active-alarm{ color:#ff4d4d; border-color:#ff4d4d; box-shadow:0 0 10px #ff4d4d; }
+/* STATES */
+.active-follow{ color:#3aa0ff; border-color:#3aa0ff; }
+.active-track{ color:#00ffb3; border-color:#00ffb3; }
+.active-watch{ color:#ffd84d; border-color:#ffd84d; }
+.active-alarm{ color:#ff4d4d; border-color:#ff4d4d; }
 </style>
 </head>
 
@@ -115,26 +100,17 @@ button:hover{
 <script>
 
 const SERVER = "https://gps-server-f9b6.onrender.com";
-const API_KEY = "LaLuna170284?";
-  
+const API_KEY = "DEIN_GEHEIMER_SCHLUESSEL";
+
 const devices = {};
 const ui = {};
 const markers = {};
 const tracks = {};
 let followId = null;
 
-/* MAP */
-const map = L.map("map").setView([47.09,15.42],13);
-/* SOCKET */
-const socket = io(SERVER);
-socket.on("location_update", update);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  maxZoom:19
-  
-}).addTo(map);
-function apiFetch(url, options = {}) {
-  return fetch(`${SERVER}${url}`, {
+/* SAFE FETCH (WICHTIG) */
+async function apiFetch(url, options = {}) {
+  const res = await fetch(`${SERVER}${url}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -142,37 +118,61 @@ function apiFetch(url, options = {}) {
       ...(options.headers || {})
     }
   });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    console.error("SERVER ERROR:", res.status, text);
+    return [];
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("INVALID JSON:", text);
+    return [];
+  }
 }
+
+/* MAP */
+const map = L.map("map").setView([47.09,15.42],13);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19
+}).addTo(map);
+
+/* SOCKET */
+const socket = io(SERVER);
+socket.on("location_update", update);
 
 /* ICON */
 function icon(name){
-  const n = (name || "").toLowerCase();
+  const n = (name||"").toLowerCase();
+  let c = "#00ffb3";
+  let l = (name?.[0]||"?").toUpperCase();
 
-  let color = "#00ffb3";
-  let letter = (name?.[0] || "?").toUpperCase();
-
-  if(n.includes("nicole")) { color = "#ff3b3b"; letter="N"; }
-  if(n.includes("oliver")) { color = "#3aa0ff"; letter="O"; }
+  if(n.includes("nicole")) { c="#ff3b3b"; l="N"; }
+  if(n.includes("oliver")) { c="#3aa0ff"; l="O"; }
 
   return L.divIcon({
     className:"",
     iconSize:[40,40],
     iconAnchor:[20,20],
     html:`
-    <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
-      <div style="position:absolute;font-size:34px;color:${color};text-shadow:0 0 10px ${color};">▲</div>
-      <div style="position:absolute;font-size:13px;font-weight:900;color:white;text-shadow:0 0 5px #000;">${letter}</div>
-    </div>`
+      <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+        <div style="position:absolute;font-size:34px;color:${c};">▲</div>
+        <div style="position:absolute;font-size:13px;color:#fff;">${l}</div>
+      </div>`
   });
 }
 
 /* UPDATE */
 function update(d){
-  const id = d.deviceId;
-  if(!id || !d.lat || !d.lon) return;
+  if(!d.deviceId) return;
 
-  devices[id] = {...devices[id], ...d};
-  ui[id] = ui[id] || {follow:false, track:false, watch:false};
+  const id = d.deviceId;
+  devices[id] = {...devices[id],...d};
+  ui[id] = ui[id] || {follow:false,track:false,watch:false};
 
   if(!markers[id]){
     markers[id] = L.marker([d.lat,d.lon],{icon:icon(d.name)}).addTo(map);
@@ -184,14 +184,12 @@ function update(d){
     if(!tracks[id]){
       tracks[id] = L.polyline([],{
         color:"#00ffb3",
-        weight:3,
-        opacity:0.7
+        weight:3
       }).addTo(map);
     }
     const pts = tracks[id].getLatLngs();
     pts.push([d.lat,d.lon]);
-    if(pts.length>200) pts.shift();
-    tracks[id].setLatLngs(pts);
+    tracks[id].setLatLngs(pts.slice(-200));
   }
 
   if(followId === id){
@@ -207,30 +205,25 @@ function render(){
   el.innerHTML = "";
 
   Object.entries(devices).forEach(([id,d])=>{
-    const u = ui[id] || {};
+    const u = ui[id];
     const online = Date.now() - (d.lastSeen||0) < 30000;
 
     el.innerHTML += `
-    <div class="device">
-      <b>${d.name || id}</b><br><br>
-
-      📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
-
-      <div class="info">
+      <div class="device">
+        <b>${d.name||id}</b><br><br>
+        📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
         ⚡ ${d.speed||0} km/h<br>
-        🎯 ±${d.accuracy||"-"} m<br>
         🔋 ${d.battery||"-"}%<br>
-        🚶 ${d.isMotion?"MOVING":"STILL"}<br>
-        📡 ${online?"🟢 ONLINE":"🔴 OFFLINE"}<br>
+        📡 ${online?"ONLINE":"OFFLINE"}<br>
+
+        <hr>
+
+        <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
+        <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
+        <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
+        <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
       </div>
-
-      <hr>
-
-      <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
-      <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
-      <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
-      <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
-    </div>`;
+    `;
   });
 }
 
@@ -249,10 +242,9 @@ function track(id){
 
 function watch(id){
   ui[id].watch = !ui[id].watch;
-  fetch(`${SERVER}/devices/${id}/watch`,{
+  apiFetch(`/devices/${id}/watch`,{
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ watch: ui[id].watch })
+    body: JSON.stringify({watch:ui[id].watch})
   });
   render();
 }
@@ -261,7 +253,7 @@ function alarm(id){
   const state = !devices[id].alarmActive;
   devices[id].alarmActive = state;
 
-  fetch(`${SERVER}/devices/${id}/alarm?active=${state}`,{
+  apiFetch(`/devices/${id}/alarm?active=${state}`,{
     method:"POST"
   });
 
@@ -278,9 +270,8 @@ function toggleFullscreen(){
 }
 
 /* INIT */
-fetch(`${SERVER}/devices`)
-.then(r=>r.json())
-.then(list => list.forEach(update));
+apiFetch("/devices")
+  .then(data => data.forEach(update));
 
 </script>
 
