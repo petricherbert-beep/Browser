@@ -2,109 +2,74 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Control Center PRO MAX</title>
+<title>GPS Control Center</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
 <style>
-
 body{
   margin:0;
   font-family:system-ui;
   background:#05070b;
-  color:#d6e2f0;
+  color:#c9d1d9;
   height:100vh;
   display:flex;
   overflow:hidden;
 }
 
-/* LEFT MENU */
-#sidebar{
+/* PANEL */
+#panel{
   width:380px;
-  display:flex;
-  flex-direction:column;
-  background:rgba(10,15,25,0.65);
-  backdrop-filter:blur(20px);
-  border-right:1px solid rgba(0,255,200,0.15);
-}
-
-/* MENU TABS */
-#tabs{
-  display:flex;
-  border-bottom:1px solid rgba(0,255,200,0.2);
-}
-
-.tab{
-  flex:1;
-  padding:12px;
-  text-align:center;
-  cursor:pointer;
-  font-weight:700;
-  font-size:12px;
-  transition:0.2s;
-  color:#aaa;
-}
-
-.tab:hover{
-  color:#00ffb3;
-  text-shadow:0 0 10px #00ffb3;
-}
-
-.tab.active{
-  color:#00ffb3;
-  border-bottom:2px solid #00ffb3;
-  box-shadow:0 0 15px rgba(0,255,180,0.3);
-}
-
-/* CONTENT */
-#content{
-  flex:1;
+  margin:1cm;
   overflow:auto;
-  padding:12px;
+  background:rgba(10,15,25,0.55);
+  padding:14px;
+  border-radius:18px;
+  border:1px solid rgba(0,255,200,0.15);
+  box-shadow:0 0 50px rgba(0,255,200,0.25);
+  backdrop-filter: blur(12px);
 }
 
-/* DEVICE CARD */
+/* MAP */
+#map{
+  flex:1;
+  margin:1cm;
+  border-radius:20px;
+  overflow:hidden;
+  box-shadow:0 0 80px rgba(0,255,200,0.25);
+  filter:brightness(0.85) contrast(1.15);
+}
+
+/* DEVICE */
 .device{
-  padding:12px;
+  padding:10px;
   margin-bottom:10px;
-  border-radius:14px;
-
+  border:1px solid rgba(0,255,200,0.15);
+  border-radius:12px;
   background:rgba(255,255,255,0.03);
-  border:1px solid rgba(0,255,200,0.1);
-
-  box-shadow:0 0 10px rgba(0,255,200,0.05);
   transition:0.2s;
 }
 
 .device:hover{
-  transform:translateY(-2px);
-  box-shadow:0 0 25px rgba(0,255,200,0.25);
+  box-shadow:0 0 20px rgba(0,255,200,0.15);
 }
-
-/* TEXT */
-.name{ font-weight:800; }
-.coords{ font-size:11px; opacity:0.7; }
 
 .info{
   font-size:12px;
-  margin-top:6px;
-  line-height:1.5;
+  opacity:0.9;
+  line-height:1.4;
 }
-
-/* STATUS */
-.online{ color:#00ff9c; text-shadow:0 0 8px #00ff9c; }
-.offline{ color:#ff4d4d; text-shadow:0 0 8px #ff4d4d; }
 
 /* BUTTONS */
 button{
-  margin:2px;
+  margin:3px;
   padding:6px 10px;
-  font-size:11px;
+  font-size:12px;
   border-radius:10px;
-  border:1px solid rgba(0,255,200,0.2);
-  background:#0a1420;
+  border:1px solid rgba(0,255,200,0.15);
+  background:#0a141f;
   color:#c9d1d9;
   cursor:pointer;
   transition:0.2s;
@@ -112,95 +77,50 @@ button{
 
 button:hover{
   transform:translateY(-1px);
-  box-shadow:0 0 12px rgba(0,255,200,0.4);
+  box-shadow:0 0 12px rgba(0,255,200,0.35);
 }
 
-/* ACTIVE GLOW */
-.active-follow{
-  border-color:#3aa0ff;
-  box-shadow:0 0 12px #3aa0ff;
-  color:#3aa0ff;
+/* FULLSCREEN */
+.glow-btn{
+  margin-bottom:10px;
+  width:100%;
+  font-weight:700;
+  border:1px solid rgba(0,255,200,0.35);
+  box-shadow:0 0 12px rgba(0,255,200,0.35);
 }
 
-.active-track{
-  border-color:#00ffb3;
-  box-shadow:0 0 12px #00ffb3;
-  color:#00ffb3;
+.glow-btn:hover{
+  box-shadow:0 0 20px rgba(0,255,200,0.7),
+             0 0 50px rgba(0,255,200,0.3);
 }
 
-.active-zoom{
-  border-color:#ffd84d;
-  box-shadow:0 0 12px #ffd84d;
-  color:#ffd84d;
-}
-
-/* MAP */
-#map{
-  flex:1;
-}
-
-/* HEADER GLOW */
-.title{
-  padding:10px;
-  font-weight:900;
-  text-align:center;
-  color:#00ffb3;
-  text-shadow:0 0 15px #00ffb3;
-  border-bottom:1px solid rgba(0,255,200,0.2);
-}
-
-/* FULLSCREEN BTN */
-.full{
-  margin:10px;
-  padding:10px;
-  font-weight:800;
-  border-radius:12px;
-  border:1px solid #00ffb3;
-  background:rgba(0,255,180,0.05);
-  color:#00ffb3;
-  box-shadow:0 0 10px rgba(0,255,180,0.3);
-  cursor:pointer;
-}
-
-.full:hover{
-  box-shadow:0 0 25px rgba(0,255,180,0.6);
-}
-
+/* ACTIVE STATES */
+.active-follow{ color:#3aa0ff; border-color:#3aa0ff; box-shadow:0 0 10px #3aa0ff; }
+.active-track{ color:#00ffb3; border-color:#00ffb3; box-shadow:0 0 10px #00ffb3; }
+.active-watch{ color:#ffd84d; border-color:#ffd84d; box-shadow:0 0 10px #ffd84d; }
+.active-alarm{ color:#ff4d4d; border-color:#ff4d4d; box-shadow:0 0 10px #ff4d4d; }
 </style>
 </head>
 
 <body>
 
-<div id="sidebar">
-
-  <div class="title">📡 GPS CONTROL CENTER</div>
-
-  <button class="full" onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
-
-  <div id="tabs">
-    <div class="tab active" onclick="setTab('devices')">DEVICES</div>
-    <div class="tab" onclick="setTab('map')">MAP</div>
-    <div class="tab" onclick="setTab('tools')">TOOLS</div>
-  </div>
-
-  <div id="content"></div>
+<div id="panel">
+  <button class="glow-btn" onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
+  <hr>
+  <div id="list"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
 
-/* CONFIG */
-const API_KEY = "LaLuna170284?";
-const BASE = "https://gps-server-f9b6.onrender.com";
+const SERVER = "https://gps-server-f9b6.onrender.com";
 
-/* STATE */
 const devices = {};
 const ui = {};
 const markers = {};
 const tracks = {};
 let followId = null;
-let tab = "devices";
 
 /* MAP */
 const map = L.map("map").setView([47.09,15.42],13);
@@ -210,165 +130,146 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
 }).addTo(map);
 
 /* SOCKET */
-const socket = io(BASE,{ auth:{ apiKey:API_KEY }});
+const socket = io(SERVER);
 socket.on("location_update", update);
 
-/* API */
-function api(url,opts={}){
-  return fetch(BASE+url,{
-    ...opts,
-    headers:{
-      "x-api-key":API_KEY,
-      "Content-Type":"application/json",
-      ...(opts.headers||{})
-    }
-  });
-}
-
-/* COLOR */
-function color(n){
-  n=(n||"").toLowerCase();
-  if(n.includes("oliver")) return "#3aa0ff";
-  if(n.includes("nicole")) return "#ff4d4d";
-  return "#00ffb3";
-}
-
-/* ICON GLOW */
+/* ICON */
 function icon(name){
-  const c=color(name);
-  const l=(name?.[0]||"?").toUpperCase();
+  const n = (name || "").toLowerCase();
+
+  let color = "#00ffb3";
+  let letter = (name?.[0] || "?").toUpperCase();
+
+  if(n.includes("nicole")) { color = "#ff3b3b"; letter="N"; }
+  if(n.includes("oliver")) { color = "#3aa0ff"; letter="O"; }
 
   return L.divIcon({
-    html:`
-      <div style="
-        width:36px;height:36px;border-radius:50%;
-        background:${c};
-        box-shadow:0 0 20px ${c};
-        display:flex;align-items:center;justify-content:center;
-        font-weight:900;color:#000;
-      ">${l}</div>
-    `,
     className:"",
-    iconSize:[36,36]
+    iconSize:[40,40],
+    iconAnchor:[20,20],
+    html:`
+    <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;font-size:34px;color:${color};text-shadow:0 0 10px ${color};">▲</div>
+      <div style="position:absolute;font-size:13px;font-weight:900;color:white;text-shadow:0 0 5px #000;">${letter}</div>
+    </div>`
   });
 }
 
 /* UPDATE */
 function update(d){
-  const id=d.deviceId;
-  if(!d.lat || !d.lon) return;
+  const id = d.deviceId;
+  if(!id || !d.lat || !d.lon) return;
 
-  devices[id]={...devices[id],...d};
-  ui[id]=ui[id]||{follow:false,track:false};
+  devices[id] = {...devices[id], ...d};
+  ui[id] = ui[id] || {follow:false, track:false, watch:false};
 
   if(!markers[id]){
-    markers[id]=L.marker([d.lat,d.lon],{icon:icon(d.name)}).addTo(map);
+    markers[id] = L.marker([d.lat,d.lon],{icon:icon(d.name)}).addTo(map);
+  } else {
+    markers[id].setLatLng([d.lat,d.lon]);
   }
-
-  markers[id].setLatLng([d.lat,d.lon]);
 
   if(ui[id].track){
     if(!tracks[id]){
-      tracks[id]=L.polyline([],{
-        color:color(d.name),
+      tracks[id] = L.polyline([],{
+        color:"#00ffb3",
         weight:3,
-        opacity:0.8
+        opacity:0.7
       }).addTo(map);
     }
-    const pts=tracks[id].getLatLngs();
+    const pts = tracks[id].getLatLngs();
     pts.push([d.lat,d.lon]);
-    if(pts.length>150) pts.shift();
+    if(pts.length>200) pts.shift();
     tracks[id].setLatLngs(pts);
   }
 
-  if(followId===id) map.panTo([d.lat,d.lon]);
+  if(followId === id){
+    map.panTo([d.lat,d.lon]);
+  }
 
-  render();
-}
-
-/* TABS */
-function setTab(t){
-  tab=t;
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  event.target.classList.add("active");
   render();
 }
 
 /* UI */
 function render(){
-  const el=document.getElementById("content");
-  el.innerHTML="";
+  const el = document.getElementById("list");
+  el.innerHTML = "";
 
-  if(tab==="devices"){
-    Object.entries(devices).forEach(([id,d])=>{
-      const u=ui[id];
-      const online = Date.now() - (d.lastSeen||0) < 30000;
+  Object.entries(devices).forEach(([id,d])=>{
+    const u = ui[id] || {};
+    const online = Date.now() - (d.lastSeen||0) < 30000;
 
-      el.innerHTML+=`
-      <div class="device">
-        <div class="name">${d.name||id}</div>
-        <div class="coords">${d.lat?.toFixed(5)}, ${d.lon?.toFixed(5)}</div>
+    el.innerHTML += `
+    <div class="device">
+      <b>${d.name || id}</b><br><br>
 
-        <div class="info">
-          ⚡ ${d.speed||0} km/h<br>
-          🔋 ${d.battery||"-"}%<br>
-          📡 <span class="${online?'online':'offline'}">
-          ${online?'ONLINE':'OFFLINE'}
-          </span>
-        </div>
+      📍 ${(+d.lat).toFixed(5)}, ${(+d.lon).toFixed(5)}<br>
 
-        <div>
-          <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
-          <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
-          <button class="active-zoom" onclick="zoom('${id}')">ZOOM</button>
-        </div>
+      <div class="info">
+        ⚡ ${d.speed||0} km/h<br>
+        🎯 ±${d.accuracy||"-"} m<br>
+        🔋 ${d.battery||"-"}%<br>
+        🚶 ${d.isMotion?"MOVING":"STILL"}<br>
+        📡 ${online?"🟢 ONLINE":"🔴 OFFLINE"}<br>
       </div>
-      `;
-    });
-  }
 
-  if(tab==="map"){
-    el.innerHTML=`<div style="padding:10px;opacity:0.7">
-      Map View aktiv – benutze FOLLOW/ZOOM im Device Tab
-    </div>`;
-  }
+      <hr>
 
-  if(tab==="tools"){
-    el.innerHTML=`<div style="padding:10px">
-      🔧 Tools Bereich (coming soon)
+      <button class="${u.follow?'active-follow':''}" onclick="follow('${id}')">FOLLOW</button>
+      <button class="${u.track?'active-track':''}" onclick="track('${id}')">TRACK</button>
+      <button class="${u.watch?'active-watch':''}" onclick="watch('${id}')">WATCH</button>
+      <button class="${d.alarmActive?'active-alarm':''}" onclick="alarm('${id}')">ALARM</button>
     </div>`;
-  }
+  });
 }
 
 /* ACTIONS */
 function follow(id){
-  ui[id].follow=!ui[id].follow;
-  followId=ui[id].follow?id:null;
+  ui[id].follow = !ui[id].follow;
+  followId = ui[id].follow ? id : null;
   render();
 }
 
 function track(id){
-  ui[id].track=!ui[id].track;
+  ui[id].track = !ui[id].track;
   if(!ui[id].track && tracks[id]) tracks[id].setLatLngs([]);
   render();
 }
 
-function zoom(id){
-  const d=devices[id];
-  if(d) map.setView([d.lat,d.lon],16);
+function watch(id){
+  ui[id].watch = !ui[id].watch;
+  fetch(`${SERVER}/devices/${id}/watch`,{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ watch: ui[id].watch })
+  });
+  render();
+}
+
+function alarm(id){
+  const state = !devices[id].alarmActive;
+  devices[id].alarmActive = state;
+
+  fetch(`${SERVER}/devices/${id}/alarm?active=${state}`,{
+    method:"POST"
+  });
+
+  render();
 }
 
 /* FULLSCREEN */
 function toggleFullscreen(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
-  }else{
+  } else {
     document.exitFullscreen();
   }
 }
 
 /* INIT */
-api("/devices").then(r=>r.json()).then(a=>a.forEach(update));
+fetch(`${SERVER}/devices`)
+.then(r=>r.json())
+.then(list => list.forEach(update));
 
 </script>
 
