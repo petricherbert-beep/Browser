@@ -5,31 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🛰️ GPS Control Center PRO</title>
 
-    <!-- Leaflet & Socket.IO -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <style>
         :root {
-            --accent: #00e676; --nicole: #e91e63; --oliver: #2196f3;
+            --accent: #00e676; --nicole: #ff1744; --oliver: #2196f3;
             --bg-dark: #0d1117; --panel-bg: #161b22; --border: #30363d; --text: #c9d1d9;
         }
 
         body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-dark); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
 
-        /* 🔒 LOGIN OVERLAY */
         #login-overlay { position: fixed; inset: 0; background: #05070b; z-index: 10000; display: flex; align-items: center; justify-content: center; }
         .login-box { background: var(--panel-bg); padding: 40px; border-radius: 20px; border: 1px solid var(--accent); text-align: center; box-shadow: 0 0 50px rgba(0, 230, 118, 0.15); }
         .login-box input { background: var(--bg-dark); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 8px; width: 240px; text-align: center; margin-bottom: 20px; font-size: 16px; outline: none; }
 
-        /* 📱 SIDEBAR */
         #sidebar { width: 420px; display: flex; flex-direction: column; background: var(--panel-bg); border-right: 1px solid var(--border); z-index: 1000; box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5); }
         .scroll-area { flex: 1; overflow-y: auto; padding: 20px; }
         .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         h2 { color: var(--accent); font-size: 18px; margin: 0; letter-spacing: 1px; }
 
-        /* 📍 DEVICE CARDS */
         .device-card { background: var(--bg-dark); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 15px; cursor: pointer; transition: 0.2s; }
         .device-card:hover { border-color: #8b949e; }
         .device-card.active { border-color: var(--accent); background: rgba(0, 230, 118, 0.03); }
@@ -42,27 +38,23 @@
         .badge-offline { background: rgba(248, 81, 73, 0.15); color: #f85149; }
         .badge-accident { background: #f85149; color: white; animation: pulse 0.8s infinite; }
 
-        /* 🎮 BUTTONS */
         .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
         button { background: #21262d; border: 1px solid var(--border); color: var(--text); padding: 9px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
         button:hover { background: #30363d; }
-        button.active-follow { border-color: var(--oliver); color: var(--oliver); }
+        button.active-follow { border-color: var(--oliver); color: var(--oliver); background: rgba(33, 150, 243, 0.1); }
         button.active-track { border-color: var(--accent); color: var(--accent); }
-        button.active-watch { border-color: #ffd84d; color: #ffd84d; }
+        button.active-watch { border-color: #ffd84d; color: #ffd84d; background: rgba(255, 216, 77, 0.1); }
         button.active-alarm { background: #f85149 !important; color: white; }
 
-        /* 🌐 GEOFENCES */
         .gf-item { font-size: 12px; display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; margin-bottom: 5px; }
         .gf-del { color: #f85149; cursor: pointer; font-weight: bold; font-size: 14px; padding: 5px; }
 
-        /* 🗺️ MAP */
         #map { flex: 1; }
 
-        /* 🏹 MARKER ICON (Optimierte Größe) */
         .marker-container { position: relative; display: flex; align-items: center; justify-content: center; }
         .marker-arrow { 
             width: 0; height: 0; border-left: solid transparent; border-right: solid transparent; border-bottom: solid; 
-            filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); transition: transform 0.4s ease;
+            filter: drop-shadow(0 0 4px rgba(0,0,0,0.6)); transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .marker-letter { position: absolute; width: 100%; text-align: center; color: white; font-weight: 900; text-shadow: 0 0 3px black; pointer-events: none; }
 
@@ -140,7 +132,7 @@
             }
             updateDevice(d);
         });
-        socket.on("geofences_updated", list => drawGeofences(list));
+        socket.on("geofences_updated", list => drawGF(list));
 
         const data = await res.json();
         const coords = [];
@@ -153,7 +145,9 @@
     }
 
     async function api(path, opt = {}) {
-        return fetch(BASE + path, { ...opt, headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) } });
+        const url = new URL(BASE + path);
+        url.searchParams.append("apiKey", API_KEY); // 🔥 FALLBACK: API-Key in URL
+        return fetch(url, { ...opt, headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) } });
     }
 
     function updateDevice(d) {
@@ -161,23 +155,24 @@
         devices[id] = { ...devices[id], ...d };
         ui[id] = ui[id] || { track: false };
 
-        // 🔥 WICHTIG: Server-Raum für Live-Updates beitreten
         if (socket) socket.emit("join_device", id);
 
-        const color = id.includes("nicole") ? "#e91e63" : "#2196f3";
+        // 🎨 FARBEN: Nicole Rot (#ff1744), Oliver Blau (#2196f3)
+        const isNicole = id.includes("nicole") || (d.name && d.name.toLowerCase().includes("nicole"));
+        const color = isNicole ? "#ff1744" : "#2196f3";
         const letter = (d.name || id).charAt(0).toUpperCase();
         
-        // 🏹 MARKER-GRÖSSE (Optimiert)
         const zoom = map.getZoom();
-        const baseSize = Math.max(10, zoom * 1.3); 
+        const baseSize = Math.max(12, zoom * 1.5); 
         const arrowHeight = baseSize * 1.4;
         const arrowWidth = baseSize * 1.0;
+        const rotation = d.bearing || 0;
 
         const icon = L.divIcon({
             className: 'custom-marker',
             html: `<div class="marker-container" style="width:${baseSize}px; height:${baseSize}px">
                     <div class="marker-arrow ${d.accident ? 'accident-blink' : ''}" 
-                         style="--rot:${d.bearing || 0}deg; transform: rotate(${d.bearing || 0}deg); 
+                         style="--rot:${rotation}deg; transform: rotate(${rotation}deg); 
                                 border-left: ${arrowWidth/2}px solid transparent;
                                 border-right: ${arrowWidth/2}px solid transparent;
                                 border-bottom: ${arrowHeight}px solid ${color}"></div>
@@ -195,9 +190,13 @@
 
         if (ui[id].track) {
             if (!tracks[id]) tracks[id] = L.polyline([], { color: color, weight: 3, opacity: 0.4 }).addTo(map);
-            const pts = tracks[id].getLatLngs(); pts.push([d.lat, d.lon]);
-            if (pts.length > 400) pts.shift();
-            tracks[id].setLatLngs(pts);
+            const pts = tracks[id].getLatLngs();
+            const last = pts[pts.length - 1];
+            if (!last || last.lat !== d.lat || last.lng !== d.lon) {
+                pts.push([d.lat, d.lon]);
+                if (pts.length > 500) pts.shift();
+                tracks[id].setLatLngs(pts);
+            }
         }
         if (followId === id) map.panTo([d.lat, d.lon]);
         render();
@@ -228,7 +227,6 @@
                         <div>📍 ${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}</div>
                         <div>🔋 ${d.battery || '--'}% | 💨 ${(d.speed*3.6).toFixed(1)} km/h</div>
                         <div>🎯 +/- ${Math.round(d.accuracy||0)}m | 🧭 ${Math.round(d.bearing||0)}°</div>
-                        ${d.temperature ? `<div>🌡️ ${d.temperature.toFixed(1)}°C</div>` : ''}
                     </div>
                     <div style="font-size:10px; opacity:0.6; margin-bottom:12px; line-height:1.5">
                         ${isLocked ? '🔒 GPS LOKAL FIXIERT' : (d.isMotion ? '🏃 IN BEWEGUNG' : '🛑 STEHEND')} | ${timeStr}<br>
@@ -244,7 +242,7 @@
         });
     }
 
-    function drawGeofences(list) {
+    function drawGF(list) {
         Object.values(gfCircles).forEach(c => map.removeLayer(c));
         const listEl = document.getElementById("gf-list"); listEl.innerHTML = "";
         list.forEach(gf => {
@@ -264,15 +262,29 @@
     function select(id) { followId = id; map.panTo([devices[id].lat, devices[id].lon]); render(); }
     function toggleFollow(id) { followId = (followId === id) ? null : id; render(); }
     function toggleTrack(id) { ui[id].track = !ui[id].track; if(!ui[id].track && tracks[id]) { map.removeLayer(tracks[id]); delete tracks[id]; } render(); }
+    
     async function toggleWatch(id) { 
-        const d=devices[id]; const action=d.isWatched?'unwatch':'watch'; 
-        const myName = "Web-Center"; // Name für die Anzeige auf dem Handy
+        const d = devices[id]; 
+        const action = d.isWatched ? 'unwatch' : 'watch'; 
+        const myName = "Web-Center";
+        
+        // 🔥 AUTO-FOLLOW: Wenn Watch aktiviert wird, Karte sofort zentrieren
+        if (!d.isWatched) followId = id;
+
         await api(`/devices/${id}/${action}?watcherId=web_center&watcherName=${myName}`, {method:"POST"}); 
-        d.isWatched=!d.isWatched; render(); 
+        d.isWatched = !d.isWatched; 
+        render(); 
     }
-    async function toggleAlarm(id) { const act=!devices[id].alarmActive; await api(`/devices/${id}/alarm?active=${act}`, {method:"POST"}); devices[id].alarmActive=act; render(); }
+
+    async function toggleAlarm(id) { 
+        const act = !devices[id].alarmActive; 
+        await api(`/devices/${id}/alarm?active=${act}`, {method:"POST"}); 
+        devices[id].alarmActive = act; 
+        render(); 
+    }
+
     async function delGF(id) { if(confirm("Löschen?")) await api(`/geofences/${id}`, {method:"DELETE"}); refreshGF(); }
-    async function refreshGF() { const r=await api("/geofences"); drawGF(await r.json()); }
+    async function refreshGF() { const r = await api("/geofences"); drawGF(await r.json()); }
     function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
 
     if (API_KEY) init();
