@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛰️ GPS Control Center PRO</title>
+    <title>🛰️ GPS Webcenter</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -99,10 +99,11 @@
 
 <script>
     const BASE = "https://gps-server-f9b6.onrender.com";
-    const WEB_CENTER_ID = "web_center"; // 🔥 Eigene ID für das Web-Dashboard
+    const WEB_CENTER_ID = "web_center"; // 🔥 Festgelegte ID für dieses Dashboard
     let API_KEY = sessionStorage.getItem("gps_key");
     let socket;
 
+    let allGeofences = []; // Lokaler Cache für Sicherheitsprüfung
     const devices = {}, ui = {}, markers = {}, tracks = {}, gfCircles = {};
     let followId = null;
 
@@ -243,11 +244,12 @@
     }
 
     function drawGF(list) {
+        allGeofences = list; // Cache aktualisieren
         Object.values(gfCircles).forEach(c => map.removeLayer(c));
         const listEl = document.getElementById("gf-list"); listEl.innerHTML = "";
         
         list.forEach(gf => {
-            // 🔥 Prüfen ob ich der Besitzer bin
+            // 🔥 STRIKTE PRÜFUNG: Nur wenn die ID exakt übereinstimmt
             const isMine = (gf.createdBy === WEB_CENTER_ID);
             const color = isMine ? '#00e676' : '#2196f3';
             
@@ -258,10 +260,10 @@
                 fillOpacity: 0.1 
             }).addTo(map);
 
-            // 🔥 Nur Lösch-Button anzeigen wenn es meine eigene Zone ist
+            // Icon: X für eigene, Schloss für fremde
             const actionIcon = isMine 
                 ? `<span class="gf-del" onclick="delGF('${gf.id}')">✕</span>` 
-                : `<span style="font-size:10px; opacity:0.4;">🔒</span>`;
+                : `<span style="font-size:10px; opacity:0.3; cursor:default;" title="Schreibgeschützt">🔒</span>`;
 
             listEl.innerHTML += `
                 <div class="gf-item" style="border-left: 3px solid ${color}">
@@ -275,9 +277,8 @@
     
     map.on('click', async e => {
         const name = prompt("Name der neuen Zone?"); if (!name) return;
-        const rad = prompt("Radius (m)?", "100"); if (!rad) return;
+        const rad = prompt("Radius (m)?", "150"); if (!rad) return;
         
-        // 🔥 Beim Erstellen meine ID mitsenden
         await api("/geofences", { 
             method: "POST", 
             body: JSON.stringify({ 
@@ -311,7 +312,20 @@
         render(); 
     }
 
-    async function delGF(id) { if(confirm("Löschen?")) await api(`/geofences/${id}`, {method:"DELETE"}); refreshGF(); }
+    async function delGF(id) { 
+        // 🔥 ZUSÄTZLICHER SCHUTZ: Prüfen ob die Zone wirklich uns gehört
+        const target = allGeofences.find(g => g.id === id);
+        if (!target || target.createdBy !== WEB_CENTER_ID) {
+            alert("Fehler: Diese Zone gehört einem anderen Gerät und kann nicht gelöscht werden.");
+            return;
+        }
+
+        if(confirm(`Zone "${target.name}" wirklich löschen?`)) {
+            await api(`/geofences/${id}`, {method:"DELETE"}); 
+            refreshGF(); 
+        }
+    }
+
     async function refreshGF() { const r = await api("/geofences"); drawGF(await r.json()); }
     function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
 
