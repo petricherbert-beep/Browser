@@ -99,6 +99,7 @@
 
 <script>
     const BASE = "https://gps-server-f9b6.onrender.com";
+    const WEB_CENTER_ID = "web_center"; // 🔥 Eigene ID für das Web-Dashboard
     let API_KEY = sessionStorage.getItem("gps_key");
     let socket;
 
@@ -146,7 +147,7 @@
 
     async function api(path, opt = {}) {
         const url = new URL(BASE + path);
-        url.searchParams.append("apiKey", API_KEY); // 🔥 FALLBACK: API-Key in URL
+        url.searchParams.append("apiKey", API_KEY);
         return fetch(url, { ...opt, headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) } });
     }
 
@@ -157,7 +158,6 @@
 
         if (socket) socket.emit("join_device", id);
 
-        // 🎨 FARBEN: Nicole Rot (#ff1744), Oliver Blau (#2196f3)
         const isNicole = id.includes("nicole") || (d.name && d.name.toLowerCase().includes("nicole"));
         const color = isNicole ? "#ff1744" : "#2196f3";
         const letter = (d.name || id).charAt(0).toUpperCase();
@@ -245,17 +245,49 @@
     function drawGF(list) {
         Object.values(gfCircles).forEach(c => map.removeLayer(c));
         const listEl = document.getElementById("gf-list"); listEl.innerHTML = "";
+        
         list.forEach(gf => {
-            gfCircles[gf.id] = L.circle([gf.lat, gf.lon], { radius: gf.radius, color: '#00e676', weight: 1, fillOpacity: 0.1 }).addTo(map);
-            listEl.innerHTML += `<div class="gf-item"><span>📍 ${gf.name} (${Math.round(gf.radius)}m)</span><span class="gf-del" onclick="delGF('${gf.id}')">✕</span></div>`;
+            // 🔥 Prüfen ob ich der Besitzer bin
+            const isMine = (gf.createdBy === WEB_CENTER_ID);
+            const color = isMine ? '#00e676' : '#2196f3';
+            
+            gfCircles[gf.id] = L.circle([gf.lat, gf.lon], { 
+                radius: gf.radius, 
+                color: color, 
+                weight: 1, 
+                fillOpacity: 0.1 
+            }).addTo(map);
+
+            // 🔥 Nur Lösch-Button anzeigen wenn es meine eigene Zone ist
+            const actionIcon = isMine 
+                ? `<span class="gf-del" onclick="delGF('${gf.id}')">✕</span>` 
+                : `<span style="font-size:10px; opacity:0.4;">🔒</span>`;
+
+            listEl.innerHTML += `
+                <div class="gf-item" style="border-left: 3px solid ${color}">
+                    <span>📍 ${gf.name} (${Math.round(gf.radius)}m)</span>
+                    ${actionIcon}
+                </div>`;
         });
     }
 
     map.on('zoomend', () => Object.values(devices).forEach(updateDevice));
+    
     map.on('click', async e => {
         const name = prompt("Name der neuen Zone?"); if (!name) return;
         const rad = prompt("Radius (m)?", "100"); if (!rad) return;
-        await api("/geofences", { method: "POST", body: JSON.stringify({ name, lat: e.latlng.lat, lon: e.latlng.lng, radius: parseInt(rad) }) });
+        
+        // 🔥 Beim Erstellen meine ID mitsenden
+        await api("/geofences", { 
+            method: "POST", 
+            body: JSON.stringify({ 
+                name, 
+                lat: e.latlng.lat, 
+                lon: e.latlng.lng, 
+                radius: parseInt(rad),
+                createdBy: WEB_CENTER_ID 
+            }) 
+        });
         refreshGF();
     });
 
@@ -266,12 +298,8 @@
     async function toggleWatch(id) { 
         const d = devices[id]; 
         const action = d.isWatched ? 'unwatch' : 'watch'; 
-        const myName = "Web-Center";
-        
-        // 🔥 AUTO-FOLLOW: Wenn Watch aktiviert wird, Karte sofort zentrieren
         if (!d.isWatched) followId = id;
-
-        await api(`/devices/${id}/${action}?watcherId=web_center&watcherName=${myName}`, {method:"POST"}); 
+        await api(`/devices/${id}/${action}?watcherId=web_center&watcherName=Web-Center`, {method:"POST"}); 
         d.isWatched = !d.isWatched; 
         render(); 
     }
