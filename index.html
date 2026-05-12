@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- 🔥 NEU: Protobuf Library -->
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.5/dist/protobuf.min.js"></script>
 
     <style>
         :root {
@@ -99,11 +101,47 @@
 
 <script>
     const BASE = "https://gps-server-f9b6.onrender.com";
-    const WEB_CENTER_ID = "web_center"; // 🔥 Festgelegte ID für dieses Dashboard
+    const WEB_CENTER_ID = "web_center"; 
     let API_KEY = sessionStorage.getItem("gps_key");
     let socket;
 
-    let allGeofences = []; // Lokaler Cache für Sicherheitsprüfung
+    // 🔥 NEU: Proto Definition passend zum Server
+    const protoSource = `
+        syntax = "proto3";
+        message DeviceLocationProto {
+          string device_id = 1;
+          double lat = 2;
+          double lon = 3;
+          int32 battery = 4;
+          float temperature = 5;
+          float speed = 6;
+          float bearing = 7;
+          int64 timestamp = 8;
+          float accuracy = 9;
+          bool offline = 10;
+          string name = 11;
+          string status = 12;
+          bool alarm_active = 13;
+          bool is_awake = 14;
+          bool is_watched = 15;
+          string watcher_name = 16;
+          string fcm_token = 17;
+          bool is_locked = 18;
+          bool is_motion = 19;
+          bool is_wifi = 20;
+          bool accident = 21;
+          double snapped_lat = 22;
+          double snapped_lon = 23;
+          string geofence_event = 24;
+          string motion_state = 25;
+        }
+        message DeviceListProto {
+          repeated DeviceLocationProto devices = 1;
+        }
+    `;
+
+    let DeviceListProto;
+    let allGeofences = []; 
     const devices = {}, ui = {}, markers = {}, tracks = {}, gfCircles = {};
     let followId = null;
 
@@ -118,7 +156,12 @@
     }
 
     async function init() {
-        const res = await api("/devices");
+        // 🔥 Protobuf initialisieren
+        const root = protobuf.parse(protoSource).root;
+        DeviceListProto = root.lookupType("DeviceListProto");
+
+        // 🔥 Abruf mit Protobuf Accept-Header
+        const res = await api("/devices", { headers: { 'Accept': 'application/x-protobuf' } });
         if (res.status === 401) { alert("Passwort falsch!"); return; }
         
         document.getElementById("login-overlay").style.display = "none";
@@ -136,9 +179,13 @@
         });
         socket.on("geofences_updated", list => drawGF(list));
 
-        const data = await res.json();
+        // 🔥 Binärdaten dekodieren
+        const buffer = await res.arrayBuffer();
+        const decoded = DeviceListProto.decode(new Uint8Array(buffer));
+        const data = DeviceListProto.toObject(decoded, { longs: Number });
+        
         const coords = [];
-        data.forEach(d => { 
+        (data.devices || []).forEach(d => { 
             updateDevice(d); 
             if (d.lat && d.lon) coords.push([d.lat, d.lon]); 
         });
@@ -149,7 +196,7 @@
     async function api(path, opt = {}) {
         const url = new URL(BASE + path);
         url.searchParams.append("apiKey", API_KEY);
-        return fetch(url, { ...opt, headers: { "Content-Type": "application/json", "x-api-key": API_KEY, ...(opt.headers || {}) } });
+        return fetch(url, { ...opt, headers: { "x-api-key": API_KEY, ...(opt.headers || {}) } });
     }
 
     function updateDevice(d) {
@@ -244,12 +291,11 @@
     }
 
     function drawGF(list) {
-        allGeofences = list; // Cache aktualisieren
+        allGeofences = list; 
         Object.values(gfCircles).forEach(c => map.removeLayer(c));
         const listEl = document.getElementById("gf-list"); listEl.innerHTML = "";
         
         list.forEach(gf => {
-            // 🔥 STRIKTE PRÜFUNG: Nur wenn die ID exakt übereinstimmt
             const isMine = (gf.createdBy === WEB_CENTER_ID);
             const color = isMine ? '#00e676' : '#2196f3';
             
@@ -260,7 +306,6 @@
                 fillOpacity: 0.1 
             }).addTo(map);
 
-            // Icon: X für eigene, Schloss für fremde
             const actionIcon = isMine 
                 ? `<span class="gf-del" onclick="delGF('${gf.id}')">✕</span>` 
                 : `<span style="font-size:10px; opacity:0.3; cursor:default;" title="Schreibgeschützt">🔒</span>`;
@@ -313,7 +358,6 @@
     }
 
     async function delGF(id) { 
-        // 🔥 ZUSÄTZLICHER SCHUTZ: Prüfen ob die Zone wirklich uns gehört
         const target = allGeofences.find(g => g.id === id);
         if (!target || target.createdBy !== WEB_CENTER_ID) {
             alert("Fehler: Diese Zone gehört einem anderen Gerät und kann nicht gelöscht werden.");
